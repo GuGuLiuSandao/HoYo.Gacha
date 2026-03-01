@@ -118,8 +118,9 @@ pub async fn business_create_gacha_records_fetcher(
   match save_to_database {
     GachaRecordSaveToDatabase::No => Ok(0),
     GachaRecordSaveToDatabase::Yes => {
+      let db = database.read().await;
       let changes =
-        GachaRecordQuestioner::create_gacha_records(&database, records, save_on_conflict, None)
+        GachaRecordQuestioner::create_gacha_records(&db, records, save_on_conflict, None)
           .await
           .map_err(Error::boxed)? as i64;
 
@@ -139,6 +140,7 @@ pub async fn business_create_gacha_records_fetcher(
           acc
         });
 
+      let db = database.read().await;
       let mut deleted: i64 = 0;
       let mut created: i64 = 0;
 
@@ -150,7 +152,7 @@ pub async fn business_create_gacha_records_fetcher(
         let oldest_end_id = records.last().map(|record| record.id.as_str()).unwrap();
 
         deleted += GachaRecordQuestioner::delete_gacha_records_by_newer_than_end_id(
-          &database,
+          &db,
           business,
           uid,
           gacha_type,
@@ -160,7 +162,7 @@ pub async fn business_create_gacha_records_fetcher(
         .map_err(Error::boxed)? as i64;
 
         created +=
-          GachaRecordQuestioner::create_gacha_records(&database, records, save_on_conflict, None)
+          GachaRecordQuestioner::create_gacha_records(&db, records, save_on_conflict, None)
             .await
             .map_err(Error::boxed)? as i64;
       }
@@ -199,7 +201,7 @@ pub async fn business_import_gacha_records(
   };
 
   let changes = GachaRecordQuestioner::create_gacha_records(
-    database.as_ref(),
+    &*database.read().await,
     records,
     save_on_conflict.unwrap_or(GachaRecordSaveOnConflict::Nothing),
     progress_reporter,
@@ -225,10 +227,11 @@ pub async fn business_export_gacha_records(
 ) -> Result<PathBuf, BoxDynErrorDetails> {
   // TODO: Progress reporting
 
+  let db = database.read().await;
   let records = match &exporter {
     GachaRecordsExporter::LegacyUigf(writer) => {
       GachaRecordQuestioner::find_gacha_records_by_business_and_uid(
-        database.as_ref(),
+        &db,
         Business::GenshinImpact,
         writer.account_uid,
       )
@@ -240,7 +243,7 @@ pub async fn business_export_gacha_records(
 
       for account_uid in writer.accounts.keys() {
         let account_records = GachaRecordQuestioner::find_gacha_records_by_businesses_or_uid(
-          database.as_ref(),
+          &db,
           writer.businesses.as_ref(),
           *account_uid,
         )
@@ -254,7 +257,7 @@ pub async fn business_export_gacha_records(
     }
     GachaRecordsExporter::Srgf(writer) => {
       GachaRecordQuestioner::find_gacha_records_by_business_and_uid(
-        database.as_ref(),
+        &db,
         Business::HonkaiStarRail,
         writer.account_uid,
       )
@@ -263,7 +266,7 @@ pub async fn business_export_gacha_records(
     }
     GachaRecordsExporter::Csv(writer) => {
       GachaRecordQuestioner::find_gacha_records_by_business_and_uid(
-        database.as_ref(),
+        &db,
         writer.business,
         writer.account_uid,
       )
@@ -283,8 +286,9 @@ pub async fn business_find_and_pretty_gacha_records(
   uid: u32,
   custom_locale: Option<String>,
 ) -> Result<PrettiedGachaRecords, BoxDynErrorDetails> {
+  let db = database.read().await;
   let records =
-    GachaRecordQuestioner::find_gacha_records_by_business_and_uid(database.as_ref(), business, uid)
+    GachaRecordQuestioner::find_gacha_records_by_business_and_uid(&db, business, uid)
       .await
       .map_err(Error::boxed)?;
 

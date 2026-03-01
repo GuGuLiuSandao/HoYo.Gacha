@@ -3,12 +3,14 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { RouterProvider } from '@tanstack/react-router'
 import useAppInit from '@/hooks/useAppInit'
+import useDatabaseRestoredListener from '@/hooks/useDatabaseRestoredListener'
 import queryClient from '@/queryClient'
 import router from '@/router'
 import '@/i18n'
 
 export default function App () {
   useAppInit()
+  useDatabaseRestoredListener()
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />

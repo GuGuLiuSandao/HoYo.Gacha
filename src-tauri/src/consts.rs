@@ -84,6 +84,7 @@ pub const KV_WINDOW_STATE: &str = "HG_WINDOW_STATE";
 // Event
 
 pub const EVENT_COLOR_SCHEME_CHANGED: &str = "HG_COLOR_SCHEME_CHANGED";
+pub const EVENT_DATABASE_RESTORED: &str = "HG_DATABASE_RESTORED";
 
 // Lazy
 

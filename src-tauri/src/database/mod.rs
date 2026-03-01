@@ -16,9 +16,9 @@ use sqlx::sqlite::{
   SqliteTypeInfo, SqliteValueRef,
 };
 use sqlx::{Decode, Encode, Executor, FromRow, Row, Type};
-use tauri::State as TauriState;
+use tauri::{Emitter, State as TauriState};
 use time::OffsetDateTime;
-use tokio::sync::mpsc;
+use tokio::sync::{RwLock, mpsc};
 use tracing::info;
 
 use crate::consts;
@@ -141,17 +141,514 @@ impl Database {
 
     ret
   }
+
+  /// Backup database to specified path
+  /// This method will checkpoint the WAL file first, then copy the database file
+  #[tracing::instrument(skip(self))]
+  pub async fn backup(&self, backup_path: impl AsRef<Path> + Debug) -> Result<PathBuf, String> {
+    let backup_path = backup_path.as_ref();
+
+    info!(
+      message = "Starting database backup",
+      backup_path = ?backup_path,
+    );
+
+    let start = Instant::now();
+
+    // Step 1: Checkpoint WAL to ensure all data is in the main database file
+    self
+      .0
+      .execute("PRAGMA wal_checkpoint(TRUNCATE);")
+      .await
+      .map_err(|e| format!("Failed to checkpoint WAL: {e}"))?;
+
+    // Step 2: Get the current database file path
+    let db_path = self
+      .0
+      .connect_options()
+      .get_filename()
+      .to_path_buf();
+
+    // Step 3: Copy the database file
+    std::fs::copy(&db_path, backup_path)
+      .map_err(|e| format!("Failed to copy database file: {e}"))?;
+
+    info!(
+      message = "Database backup completed",
+      elapsed = ?start.elapsed(),
+      source = ?db_path,
+      backup_path = ?backup_path,
+    );
+
+    Ok(backup_path.to_path_buf())
+  }
+
+  /// Get the current database file path
+  pub fn database_path(&self) -> PathBuf {
+    self.0.connect_options().get_filename().to_path_buf()
+  }
+
+  /// Get the backup directory (same as database directory)
+  fn backup_dir(&self) -> PathBuf {
+    self
+      .database_path()
+      .parent()
+      .expect("Database path should have a parent")
+      .to_path_buf()
+  }
+
+  /// Create a backup with auto-incremented number
+  /// Backup file format: {db_name}.bak.{number}
+  #[tracing::instrument(skip(self))]
+  pub async fn create_backup(&self) -> Result<BackupInfo, String> {
+    let start = Instant::now();
+
+    // Step 1: Checkpoint WAL
+    self
+      .0
+      .execute("PRAGMA wal_checkpoint(TRUNCATE);")
+      .await
+      .map_err(|e| format!("Failed to checkpoint WAL: {e}"))?;
+
+    // Step 2: Find next backup number
+    let backup_number = self.get_next_backup_number();
+    let db_path = self.database_path();
+    let backup_path = self.get_backup_path(backup_number);
+
+    // Step 3: Copy database file
+    std::fs::copy(&db_path, &backup_path)
+      .map_err(|e| format!("Failed to copy database file: {e}"))?;
+
+    // Step 4: Get file metadata
+    let metadata = std::fs::metadata(&backup_path)
+      .map_err(|e| format!("Failed to get backup file metadata: {e}"))?;
+
+    info!(
+      message = "Database backup created",
+      elapsed = ?start.elapsed(),
+      backup_path = ?backup_path,
+      backup_number,
+    );
+
+    Ok(BackupInfo {
+      number: backup_number,
+      path: backup_path,
+      size: metadata.len(),
+      modified_time: metadata
+        .modified()
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .map(|d| d.as_secs()),
+    })
+  }
+
+  /// Get the next available backup number
+  fn get_next_backup_number(&self) -> u32 {
+    let backup_dir = self.backup_dir();
+    let db_path = self.database_path();
+    let db_name = db_path
+      .file_name()
+      .and_then(|n| n.to_str())
+      .unwrap_or("database.db");
+
+    let prefix = format!("{db_name}.bak.");
+
+    let mut max_number = 0u32;
+
+    if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+      for entry in entries.flatten() {
+        if let Some(name) = entry.file_name().to_str() {
+          if name.starts_with(&prefix) {
+            if let Some(number_str) = name.strip_prefix(&prefix) {
+              if let Ok(number) = number_str.parse::<u32>() {
+                max_number = max_number.max(number);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    max_number + 1
+  }
+
+  /// Get backup path for a given number
+  fn get_backup_path(&self, number: u32) -> PathBuf {
+    let db_path = self.database_path();
+    let backup_name = format!("{}.bak.{}", db_path.file_name().unwrap().to_str().unwrap(), number);
+    db_path.parent().unwrap().join(backup_name)
+  }
+
+  /// List all backup files
+  pub fn list_backups(&self) -> Result<Vec<BackupInfo>, String> {
+    let backup_dir = self.backup_dir();
+    let db_path = self.database_path();
+    let db_name = db_path
+      .file_name()
+      .and_then(|n| n.to_str())
+      .unwrap_or("database.db");
+
+    let prefix = format!("{db_name}.bak.");
+    let mut backups = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+          if name.starts_with(&prefix) {
+            if let Some(number_str) = name.strip_prefix(&prefix) {
+              if let Ok(number) = number_str.parse::<u32>() {
+                if let Ok(metadata) = std::fs::metadata(&path) {
+                  backups.push(BackupInfo {
+                    number,
+                    path: path.clone(),
+                    size: metadata.len(),
+                    modified_time: metadata
+                      .modified()
+                      .ok()
+                      .and_then(|t| t.elapsed().ok())
+                      .map(|d| d.as_secs()),
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Sort by number descending (newest first)
+    backups.sort_by(|a, b| b.number.cmp(&a.number));
+
+    Ok(backups)
+  }
+
+  /// Restore database from a backup file
+  /// This will create a backup of current database before restoring
+  /// Returns the backup number created before restore
+  #[tracing::instrument(skip(self))]
+  pub async fn restore_backup(&self, backup_number: u32) -> Result<u32, String> {
+    let start = Instant::now();
+
+    // Step 1: Checkpoint WAL
+    self
+      .0
+      .execute("PRAGMA wal_checkpoint(TRUNCATE);")
+      .await
+      .map_err(|e| format!("Failed to checkpoint WAL: {e}"))?;
+
+    // Step 2: Verify backup exists
+    let backup_path = self.get_backup_path(backup_number);
+    if !backup_path.exists() {
+      return Err(format!("Backup file not found: {:?}", backup_path));
+    }
+
+    // Step 3: Create backup of current database before restore
+    let pre_restore_backup_number = self.get_next_backup_number();
+    let db_path = self.database_path();
+    let pre_restore_backup_path = self.get_backup_path(pre_restore_backup_number);
+
+    std::fs::copy(&db_path, &pre_restore_backup_path)
+      .map_err(|e| format!("Failed to backup current database before restore: {e}"))?;
+
+    info!(
+      message = "Created pre-restore backup",
+      pre_restore_backup_number,
+      pre_restore_backup_path = ?pre_restore_backup_path,
+    );
+
+    // Step 4: Restore from backup
+    std::fs::copy(&backup_path, &db_path)
+      .map_err(|e| format!("Failed to restore database from backup: {e}"))?;
+
+    info!(
+      message = "Database restored from backup",
+      elapsed = ?start.elapsed(),
+      backup_number,
+      restored_from = ?backup_path,
+    );
+
+    Ok(pre_restore_backup_number)
+  }
+
+  /// Delete a backup file
+  pub fn delete_backup(&self, backup_number: u32) -> Result<(), String> {
+    let backup_path = self.get_backup_path(backup_number);
+    if backup_path.exists() {
+      std::fs::remove_file(&backup_path)
+        .map_err(|e| format!("Failed to delete backup file: {e}"))?;
+      info!(message = "Backup deleted", backup_number, backup_path = ?backup_path);
+    }
+    Ok(())
+  }
 }
 
-pub type DatabaseState<'r> = TauriState<'r, Arc<Database>>;
+/// DatabaseManager provides atomic database switching capability
+/// It wraps the database in a RwLock to allow hot-swapping during backup restore
+pub struct DatabaseManager {
+  inner: RwLock<Arc<Database>>,
+  path: PathBuf,
+}
+
+impl DatabaseManager {
+  pub fn new(database: Database) -> Self {
+    let path = database.database_path();
+    Self {
+      inner: RwLock::new(Arc::new(database)),
+      path,
+    }
+  }
+
+  /// Get a read guard to the database
+  pub async fn read(&self) -> tokio::sync::RwLockReadGuard<'_, Arc<Database>> {
+    self.inner.read().await
+  }
+
+  /// Get the database file path
+  pub fn database_path(&self) -> &Path {
+    &self.path
+  }
+
+  /// Get the backup directory (same as database directory)
+  fn backup_dir(&self) -> PathBuf {
+    self
+      .path
+      .parent()
+      .expect("Database path should have a parent")
+      .to_path_buf()
+  }
+
+  /// Get backup path for a given number
+  fn get_backup_path(number: u32) -> impl FnOnce(&Path) -> PathBuf {
+    move |db_path: &Path| {
+      let backup_name = format!("{}.bak.{}", db_path.file_name().unwrap().to_str().unwrap(), number);
+      db_path.parent().unwrap().join(backup_name)
+    }
+  }
+
+  /// Get the next available backup number
+  fn get_next_backup_number(db_path: &Path) -> u32 {
+    let backup_dir = db_path.parent().expect("Database path should have a parent");
+    let db_name = db_path
+      .file_name()
+      .and_then(|n| n.to_str())
+      .unwrap_or("database.db");
+
+    let prefix = format!("{db_name}.bak.");
+
+    let mut max_number = 0u32;
+
+    if let Ok(entries) = std::fs::read_dir(backup_dir) {
+      for entry in entries.flatten() {
+        if let Some(name) = entry.file_name().to_str() {
+          if name.starts_with(&prefix) {
+            if let Some(number_str) = name.strip_prefix(&prefix) {
+              if let Ok(number) = number_str.parse::<u32>() {
+                max_number = max_number.max(number);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    max_number + 1
+  }
+
+  /// Restore database from backup and reconnect (hot-swap)
+  /// This will:
+  /// 1. Acquire write lock (blocking all reads)
+  /// 2. Close old connection pool
+  /// 3. Create backup of current database (for undo)
+  /// 4. Replace database file with backup
+  /// 5. Create new connection pool
+  /// 6. Update the inner Arc
+  ///
+  /// Returns the backup number created before restore (for undo)
+  #[tracing::instrument(skip(self))]
+  pub async fn restore_and_reconnect(&self, backup_number: u32) -> Result<u32, String> {
+    let start = Instant::now();
+
+    // 1. Get write lock (blocks all reads)
+    let mut db_guard = self.inner.write().await;
+
+    // 2. Close old connection pool
+    info!("Closing old database connection...");
+    db_guard.close().await;
+
+    // 3. Find backup file
+    let backup_path = Self::get_backup_path(backup_number)(&self.path);
+    if !backup_path.exists() {
+      return Err(format!("Backup file not found: {:?}", backup_path));
+    }
+
+    // 4. Create backup of current database (for undo)
+    let pre_restore_number = Self::get_next_backup_number(&self.path);
+    let pre_restore_path = Self::get_backup_path(pre_restore_number)(&self.path);
+
+    info!(
+      message = "Creating pre-restore backup",
+      pre_restore_number,
+      pre_restore_path = ?pre_restore_path,
+    );
+
+    std::fs::copy(&self.path, &pre_restore_path)
+      .map_err(|e| format!("Failed to backup current database: {e}"))?;
+
+    // 5. Replace database file with backup
+    std::fs::copy(&backup_path, &self.path)
+      .map_err(|e| format!("Failed to restore database from backup: {e}"))?;
+
+    // 6. Create new database connection
+    info!("Creating new database connection...");
+    let new_db = Database::new_with(&self.path).await;
+
+    // 7. Update the inner Arc
+    *db_guard = Arc::new(new_db);
+
+    info!(
+      message = "Database restored and reconnected",
+      elapsed = ?start.elapsed(),
+      backup_number,
+    );
+
+    Ok(pre_restore_number)
+  }
+
+  /// Create a backup with auto-incremented number
+  #[tracing::instrument(skip(self))]
+  pub async fn create_backup(&self) -> Result<BackupInfo, String> {
+    let db = self.read().await;
+    db.create_backup().await
+  }
+
+  /// List all backup files
+  pub fn list_backups(&self) -> Result<Vec<BackupInfo>, String> {
+    let backup_dir = self.backup_dir();
+    let db_name = self
+      .path
+      .file_name()
+      .and_then(|n| n.to_str())
+      .unwrap_or("database.db");
+
+    let prefix = format!("{db_name}.bak.");
+    let mut backups = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+          if name.starts_with(&prefix) {
+            if let Some(number_str) = name.strip_prefix(&prefix) {
+              if let Ok(number) = number_str.parse::<u32>() {
+                if let Ok(metadata) = std::fs::metadata(&path) {
+                  backups.push(BackupInfo {
+                    number,
+                    path: path.clone(),
+                    size: metadata.len(),
+                    modified_time: metadata
+                      .modified()
+                      .ok()
+                      .and_then(|t| t.elapsed().ok())
+                      .map(|d| d.as_secs()),
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Sort by number descending (newest first)
+    backups.sort_by(|a, b| b.number.cmp(&a.number));
+
+    Ok(backups)
+  }
+
+  /// Delete a backup file
+  pub fn delete_backup(&self, backup_number: u32) -> Result<(), String> {
+    let backup_path = Self::get_backup_path(backup_number)(&self.path);
+    if backup_path.exists() {
+      std::fs::remove_file(&backup_path)
+        .map_err(|e| format!("Failed to delete backup file: {e}"))?;
+      info!(message = "Backup deleted", backup_number, backup_path = ?backup_path);
+    }
+    Ok(())
+  }
+}
+
+/// Backup file information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupInfo {
+  /// Backup number
+  pub number: u32,
+  /// Full path to backup file
+  pub path: PathBuf,
+  /// File size in bytes
+  pub size: u64,
+  /// Modified time as seconds ago from now
+  pub modified_time: Option<u64>,
+}
+
+pub type DatabaseState<'r> = TauriState<'r, DatabaseManager>;
 
 #[tauri::command]
 pub async fn database_execute(
   database: DatabaseState<'_>,
   query: String,
 ) -> Result<u64, SqlxError> {
-  let ret = database.execute(query).await?;
+  let db = database.read().await;
+  let ret = db.execute(query).await?;
   Ok(ret.rows_affected())
+}
+
+/// Create a backup with auto-incremented number
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn database_create_backup(database: DatabaseState<'_>) -> Result<BackupInfo, String> {
+  database.create_backup().await
+}
+
+/// List all backup files
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn database_list_backups(database: DatabaseState<'_>) -> Result<Vec<BackupInfo>, String> {
+  database.list_backups()
+}
+
+/// Restore database from a backup file (hot-swap)
+/// Returns the backup number created before restore (for undo)
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn database_restore_backup(
+  app: tauri::AppHandle,
+  database: DatabaseState<'_>,
+  backup_number: u32,
+) -> Result<u32, String> {
+  let result = database.restore_and_reconnect(backup_number).await?;
+
+  // Emit event to notify frontend to refresh data
+  app
+    .emit(consts::EVENT_DATABASE_RESTORED, ())
+    .map_err(|e| e.to_string())?;
+
+  Ok(result)
+}
+
+/// Delete a backup file
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn database_delete_backup(database: DatabaseState<'_>, backup_number: u32) -> Result<(), String> {
+  database.delete_backup(backup_number)
+}
+
+/// Get the current database file path
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn database_path(database: DatabaseState<'_>) -> PathBuf {
+  database.database_path().to_path_buf()
 }
 
 // region: SQL
@@ -366,7 +863,8 @@ macro_rules! declare_questioner_with_handlers {
             database: crate::database::DatabaseState<'_>,
             $($arg_n: $arg_t),*
           ) -> Result<$result, crate::database::SqlxError> {
-            super::[<$entity Questioner>]::$name(&*database, $($arg_n),*).await
+            let db = database.read().await;
+            super::[<$entity Questioner>]::$name(&db, $($arg_n),*).await
           }
         )*
       }
@@ -812,7 +1310,8 @@ pub mod gacha_record_questioner_additions {
     records: Vec<GachaRecord>,
     on_conflict: GachaRecordSaveOnConflict,
   ) -> Result<u64, SqlxError> {
-    GachaRecordQuestioner::create_gacha_records(database.as_ref(), records, on_conflict, None).await
+    let db = database.read().await;
+    GachaRecordQuestioner::create_gacha_records(&db, records, on_conflict, None).await
   }
 
   #[tauri::command]
@@ -821,8 +1320,9 @@ pub mod gacha_record_questioner_additions {
     business: Business,
     uid: u32,
   ) -> Result<u64, SqlxError> {
+    let db = database.read().await;
     GachaRecordQuestioner::delete_gacha_records_by_business_and_uid(
-      database.as_ref(),
+      &db,
       business,
       uid,
     )
@@ -835,8 +1335,9 @@ pub mod gacha_record_questioner_additions {
     businesses: HashSet<Business>,
     uid: u32,
   ) -> Result<Vec<GachaRecord>, SqlxError> {
+    let db = database.read().await;
     GachaRecordQuestioner::find_gacha_records_by_businesses_and_uid(
-      database.as_ref(),
+      &db,
       &businesses,
       uid,
     )
@@ -849,8 +1350,9 @@ pub mod gacha_record_questioner_additions {
     businesses: Option<HashSet<Business>>,
     uid: u32,
   ) -> Result<Vec<GachaRecord>, SqlxError> {
+    let db = database.read().await;
     GachaRecordQuestioner::find_gacha_records_by_businesses_or_uid(
-      database.as_ref(),
+      &db,
       businesses.as_ref(),
       uid,
     )
@@ -864,10 +1366,11 @@ pub async fn database_legacy_migration(
   database: DatabaseState<'_>,
   legacy_database: Option<PathBuf>,
 ) -> Result<MigrationMetrics, LegacyMigrationError> {
+  let db = database.read().await;
   if let Some(legacy_database) = legacy_database {
-    legacy_migration::migration_with(&database, legacy_database).await
+    legacy_migration::migration_with(&db, legacy_database).await
   } else {
-    legacy_migration::migration(&database).await
+    legacy_migration::migration(&db).await
   }
 }
 

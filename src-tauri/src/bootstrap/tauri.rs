@@ -20,7 +20,7 @@ use super::tracing::Tracing;
 use super::updater::{UpdatedKind, Updater};
 use crate::bootstrap::ffi::AppsUseThemeMonitor;
 use crate::business::GachaMetadata;
-use crate::database::{self, Database, KvMut};
+use crate::database::{self, Database, DatabaseManager, KvMut};
 use crate::models::{ThemeData, WindowState};
 use crate::utilities::file_dialog;
 use crate::{business, consts};
@@ -32,14 +32,15 @@ pub async fn start(singleton: Singleton, tracing: Tracing, database: Database) {
   info!("Setting Tauri asynchronous runtime as Tokio...");
   tauri::async_runtime::set(tokio::runtime::Handle::current());
 
-  // Arc shared database to Tauri state
-  let database = Arc::new(database);
+  // Create DatabaseManager for hot-swap capability
+  let database = DatabaseManager::new(database);
 
   #[cfg(windows)]
   let mut apps_use_theme_monitor = AppsUseThemeMonitor::default();
 
   info!("Loading theme data...");
-  let color_scheme = KvMut::from(&database, consts::KV_THEME_DATA)
+  let db_guard = database.read().await;
+  let color_scheme = KvMut::from(&*db_guard, consts::KV_THEME_DATA)
     .try_read_val_json::<ThemeData>()
     .await
     .expect("Error reading theme data from database")
@@ -56,7 +57,7 @@ pub async fn start(singleton: Singleton, tracing: Tracing, database: Database) {
     });
 
   info!("Loading window state...");
-  let window_state = KvMut::from(&database, consts::KV_WINDOW_STATE)
+  let window_state = KvMut::from(&*db_guard, consts::KV_WINDOW_STATE)
     .try_read_val_json::<WindowState>()
     .await
     .expect("Error reading window state from database")
@@ -86,7 +87,7 @@ pub async fn start(singleton: Singleton, tracing: Tracing, database: Database) {
   }
 
   info!("Creating Tauri application...");
-  let database_state = Arc::clone(&database);
+  let database_state = database;
   let app = TauriBuilder::default()
     .plugin(tauri_plugin_clipboard_manager::init())
     .plugin(tauri_plugin_process::init())
@@ -245,10 +246,11 @@ pub async fn start(singleton: Singleton, tracing: Tracing, database: Database) {
           match update_window_state(&mut window_state, &main_window) {
             Err(error) => error!("Failed to update window state: {error}"),
             Ok(_) => {
-              let database = window.state::<Arc<Database>>();
+              let database = window.state::<DatabaseManager>();
               let ret = tokio::task::block_in_place(move || {
                 tauri::async_runtime::block_on(async move {
-                  KvMut::from(&database, consts::KV_WINDOW_STATE)
+                  let db = database.read().await;
+                  KvMut::from(&*db, consts::KV_WINDOW_STATE)
                     .try_write_json(&*window_state)
                     .await
                 })
@@ -314,6 +316,11 @@ pub async fn start(singleton: Singleton, tracing: Tracing, database: Database) {
       database::gacha_record_questioner_additions::database_find_gacha_records_by_businesses_and_uid,
       database::gacha_record_questioner_additions::database_find_gacha_records_by_businesses_or_uid,
       database::database_legacy_migration,
+      database::database_create_backup,
+      database::database_list_backups,
+      database::database_restore_backup,
+      database::database_delete_backup,
+      database::database_path,
       business::business_locate_data_folder,
       business::business_from_webcaches_gacha_url,
       business::business_from_dirty_gacha_url,
@@ -352,7 +359,10 @@ pub async fn start(singleton: Singleton, tracing: Tracing, database: Database) {
   #[cfg(windows)]
   apps_use_theme_monitor.stop();
 
-  database.close().await;
+  {
+    let db = database.read().await;
+    db.close().await;
+  }
   tracing.close();
   drop(singleton);
 

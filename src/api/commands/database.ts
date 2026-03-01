@@ -169,6 +169,23 @@ export const legacyMigration = declareCommand<LegacyMigrationArgs, {
 
 // #endregion
 
+// #region: Backup
+
+export interface BackupInfo {
+  number: number
+  path: string
+  size: number
+  modifiedTime: number | null
+}
+
+export const createBackup = declareCommand<undefined, BackupInfo>('database_create_backup')
+export const listBackups = declareCommand<undefined, BackupInfo[]>('database_list_backups')
+export const restoreBackup = declareCommand<{ backupNumber: number }, number>('database_restore_backup')
+export const deleteBackup = declareCommand<{ backupNumber: number }, void>('database_delete_backup')
+export const databasePath = declareCommand<undefined, string>('database_path')
+
+// #endregion
+
 // Export
 
 const DatabaseCommands = {
@@ -193,6 +210,11 @@ const DatabaseCommands = {
   findGachaRecordsByBusinessesAndUid,
   findGachaRecordsByBusinessesOrUid,
   legacyMigration,
+  createBackup,
+  listBackups,
+  restoreBackup,
+  deleteBackup,
+  databasePath,
 } as const
 
 Object.freeze(DatabaseCommands)
