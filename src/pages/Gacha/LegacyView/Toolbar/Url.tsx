@@ -14,10 +14,10 @@ import useGachaRecordsFetcher, { GachaRecordsFetcherFetchArgs, GachaRecordsFetch
 import useI18n from '@/hooks/useI18n'
 import useNotifier from '@/hooks/useNotifier'
 import { KnownAccountProperties } from '@/interfaces/Account'
-import { Business, KeyofBusinesses, detectUidBusinessRegion } from '@/interfaces/Business'
+import { Business, KeyofBusinesses, MiliastraWonderland, detectUidBusinessRegion } from '@/interfaces/Business'
 import { computeGachaTypeAndLastEndIdMappings } from '@/interfaces/GachaRecord'
 import dayjs from '@/utilities/dayjs'
-import ManualInsertDialog, { isManualInsertSupported } from './ManualInsert'
+import ManualInsertDialog from './ManualInsert'
 
 const useStyles = makeStyles({
   root: {
@@ -44,6 +44,10 @@ export default function GachaLegacyViewToolbarUrl () {
       </div>
     </div>
   )
+}
+
+function isManualInsertSupported (business: Business): boolean {
+  return business !== MiliastraWonderland
 }
 
 function computeGachaUrlDeadline (creationTime: KnownAccountProperties['gachaUrlCreationTime']): dayjs.Dayjs | null {

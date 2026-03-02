@@ -9,7 +9,7 @@ import { invalidateFirstGachaRecordQuery, invalidatePrettizedGachaRecordsQuery }
 import Locale from '@/components/Locale'
 import useI18n from '@/hooks/useI18n'
 import useNotifier from '@/hooks/useNotifier'
-import { Business, KeyofBusinesses, MiliastraWonderland } from '@/interfaces/Business'
+import { Business, KeyofBusinesses } from '@/interfaces/Business'
 import dayjs from '@/utilities/dayjs'
 
 const useStyles = makeStyles({
@@ -64,10 +64,6 @@ const defaultFormValues = (business: Business) => ({
   pullCount: '1',
   endTime: dayjs().format('YYYY-MM-DDTHH:mm:ss'),
 })
-
-export function isManualInsertSupported (business: Business) {
-  return business !== MiliastraWonderland
-}
 
 type FormData = {
   gachaType: string
