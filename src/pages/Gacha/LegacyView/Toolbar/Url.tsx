@@ -1,7 +1,7 @@
 import React, { ElementRef, Fragment, forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react'
 import { SubmitHandler, useForm } from 'react-hook-form'
 import { Body1, Button, Caption1, Caption2, Dialog, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Menu, MenuDivider, MenuGroup, MenuGroupHeader, MenuItem, MenuList, MenuPopover, MenuTrigger, Spinner, SplitButton, Textarea, Tooltip, inputClassNames, makeStyles, mergeClasses, tokens } from '@fluentui/react-components'
-import { ArrowClockwiseRegular, ArrowSyncRegular, CopyRegular, LinkEditRegular, LinkRegular } from '@fluentui/react-icons'
+import { AddRegular, ArrowClockwiseRegular, ArrowSyncRegular, CopyRegular, LinkEditRegular, LinkRegular } from '@fluentui/react-icons'
 import * as clipboard from '@tauri-apps/plugin-clipboard-manager'
 import { produce } from 'immer'
 import { GachaRecordsFetcherFragmentKind, GachaUrl, GachaUrlErrorKind, fromDirtyGachaUrl, fromWebCachesGachaUrl, isGachaUrlError } from '@/api/commands/business'
@@ -17,6 +17,7 @@ import { KnownAccountProperties } from '@/interfaces/Account'
 import { Business, KeyofBusinesses, detectUidBusinessRegion } from '@/interfaces/Business'
 import { computeGachaTypeAndLastEndIdMappings } from '@/interfaces/GachaRecord'
 import dayjs from '@/utilities/dayjs'
+import ManualInsertDialog, { isManualInsertSupported } from './ManualInsert'
 
 const useStyles = makeStyles({
   root: {
@@ -362,6 +363,11 @@ function GachaLegacyViewToolbarUrlButton () {
     manualInputDialogRef.current?.setOpen(true)
   }, [])
 
+  const manualInsertDialogRef = useRef<ElementRef<typeof ManualInsertDialog>>(null)
+  const handleManualInsertClick = useCallback(() => {
+    manualInsertDialogRef.current?.setOpen(true)
+  }, [])
+
   return (
     <Fragment>
       <Menu positioning="below-end">
@@ -402,6 +408,13 @@ function GachaLegacyViewToolbarUrlButton () {
                 onClick={handleManualInputClick}
                 mapping={['Pages.Gacha.LegacyView.Toolbar.Url.ManualInputBtn']}
               />
+              <Locale
+                component={MenuItem}
+                icon={<AddRegular />}
+                onClick={handleManualInsertClick}
+                disabled={!selectedAccount || !isManualInsertSupported(business)}
+                mapping={['Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertBtn']}
+              />
             </MenuGroup>
           </MenuList>
         </MenuPopover>
@@ -426,6 +439,12 @@ function GachaLegacyViewToolbarUrlButton () {
         business={business}
         keyofBusinesses={keyofBusinesses}
       />
+      {isManualInsertSupported(business) &&
+        <ManualInsertDialog
+          ref={manualInsertDialogRef}
+          business={business}
+          keyofBusinesses={keyofBusinesses}
+        />}
     </Fragment>
   )
 }

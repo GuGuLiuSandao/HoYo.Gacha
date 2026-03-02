@@ -5,11 +5,14 @@ use serde::Deserialize;
 use tauri::{Emitter, WebviewWindow};
 use time::format_description::FormatItem;
 use time::macros::format_description;
+use time::{Duration, OffsetDateTime};
 use tokio::sync::mpsc;
 
+use crate::consts;
 use crate::database::{
   DatabaseState, GachaRecordQuestioner, GachaRecordQuestionerAdditions, GachaRecordSaveOnConflict,
 };
+use crate::error::declare_error_kinds;
 use crate::error::{BoxDynErrorDetails, Error};
 use crate::models::{Business, BusinessRegion, GachaRecord};
 
@@ -32,6 +35,79 @@ pub const GACHA_TIME_FORMAT: &[FormatItem<'_>] =
   format_description!("[year]-[month]-[day] [hour]:[minute]:[second]");
 
 time::serde::format_description!(pub gacha_time_format, PrimitiveDateTime, GACHA_TIME_FORMAT);
+
+declare_error_kinds! {
+  #[derive(Debug, thiserror::Error)]
+  ManualInsertGachaRecordsError {
+    #[error("Unsupported business: {business}")]
+    UnsupportedBusiness { business: Business },
+
+    #[error("Unsupported gacha type: {gacha_type} for business: {business}")]
+    UnsupportedGachaType { business: Business, gacha_type: u32 },
+
+    #[error("Invalid pull count: {pull_count}")]
+    InvalidPullCount { pull_count: u32 },
+
+    #[error("Missing metadata locale: {locale} ({business})")]
+    MissingMetadataLocale { business: Business, locale: String },
+
+    #[error("Character not found in metadata: {name} ({business}, {locale})")]
+    CharacterNotFound {
+      business: Business,
+      locale: String,
+      name: String
+    },
+
+    #[error("The character is not a supported 5-star entry: {name} ({business}, {locale})")]
+    InvalidCharacter {
+      business: Business,
+      locale: String,
+      name: String
+    },
+
+    #[error("Missing default item metadata entry: id={item_id} ({business}, {locale})")]
+    MissingDefaultMetadataEntry {
+      business: Business,
+      locale: String,
+      item_id: u32
+    },
+
+    #[error("Database error: {cause}")]
+    Sqlx { cause: String },
+  }
+}
+
+const MANUAL_INSERT_PULL_COUNT_MAX: u32 = 5000;
+
+fn is_supported_manual_insert_gacha_type(business: Business, gacha_type: u32) -> bool {
+  match business {
+    Business::GenshinImpact => matches!(gacha_type, 100 | 200 | 301 | 400 | 302 | 500),
+    Business::HonkaiStarRail => matches!(gacha_type, 1 | 2 | 11 | 12 | 21 | 22),
+    Business::ZenlessZoneZero => matches!(gacha_type, 1 | 2 | 3 | 5 | 102 | 103),
+    Business::MiliastraWonderland => false,
+  }
+}
+
+fn manual_insert_default_item_ids(business: Business) -> Result<(u32, u32), ManualInsertGachaRecordsError> {
+  match business {
+    Business::GenshinImpact => Ok((12305, 11401)),
+    Business::HonkaiStarRail => Ok((20000, 21000)),
+    Business::ZenlessZoneZero => Ok((21002, 22002)),
+    Business::MiliastraWonderland => {
+      Err(ManualInsertGachaRecordsErrorKind::UnsupportedBusiness { business })?
+    }
+  }
+}
+
+fn manual_insert_required_golden_rank(business: Business) -> Result<u8, ManualInsertGachaRecordsError> {
+  match business {
+    Business::GenshinImpact | Business::HonkaiStarRail => Ok(5),
+    Business::ZenlessZoneZero => Ok(4),
+    Business::MiliastraWonderland => {
+      Err(ManualInsertGachaRecordsErrorKind::UnsupportedBusiness { business })?
+    }
+  }
+}
 
 // region: Tauri plugin
 
@@ -170,6 +246,151 @@ pub async fn business_create_gacha_records_fetcher(
       Ok(changes)
     }
   }
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn business_manual_insert_gacha_records(
+  database: DatabaseState<'_>,
+  business: Business,
+  uid: u32,
+  gacha_type: u32,
+  five_star_name: String,
+  pull_count: u32,
+  end_time: OffsetDateTime,
+  custom_locale: Option<String>,
+) -> Result<u64, ManualInsertGachaRecordsError> {
+  if !is_supported_manual_insert_gacha_type(business, gacha_type) {
+    return Err(ManualInsertGachaRecordsErrorKind::UnsupportedGachaType {
+      business,
+      gacha_type,
+    })?;
+  }
+
+  if pull_count == 0 || pull_count > MANUAL_INSERT_PULL_COUNT_MAX {
+    return Err(ManualInsertGachaRecordsErrorKind::InvalidPullCount { pull_count })?;
+  }
+
+  let locale = custom_locale
+    .or_else(|| consts::LOCALE.value.clone())
+    .unwrap_or_else(|| String::from("en-us"));
+
+  let metadata_locale = GachaMetadata::current().locale(business, &locale).ok_or_else(|| {
+    ManualInsertGachaRecordsErrorKind::MissingMetadataLocale {
+      business,
+      locale: locale.clone(),
+    }
+  })?;
+
+  let metadata_locale_name = metadata_locale.locale.clone();
+  let golden_rank = manual_insert_required_golden_rank(business)?;
+  let five_star_entry = metadata_locale
+    .entry_from_name(&five_star_name)
+    .and_then(|entries| {
+      entries.into_iter().find(|entry| {
+        entry.category == GachaMetadata::CATEGORY_CHARACTER && entry.rank == golden_rank
+      })
+    })
+    .ok_or_else(|| {
+      let kind =
+        if metadata_locale.entry_from_name_first(&five_star_name).is_some() {
+          ManualInsertGachaRecordsErrorKind::InvalidCharacter {
+            business,
+            locale: metadata_locale_name.clone(),
+            name: five_star_name.clone(),
+          }
+        } else {
+          ManualInsertGachaRecordsErrorKind::CharacterNotFound {
+            business,
+            locale: metadata_locale_name.clone(),
+            name: five_star_name.clone(),
+          }
+        };
+      ManualInsertGachaRecordsError::from(kind)
+    })?;
+
+  let (blue_item_id, purple_item_id) = manual_insert_default_item_ids(business)?;
+  let blue_entry = metadata_locale.entry_from_id(blue_item_id).ok_or_else(|| {
+    ManualInsertGachaRecordsErrorKind::MissingDefaultMetadataEntry {
+      business,
+      locale: metadata_locale_name.clone(),
+      item_id: blue_item_id,
+    }
+  })?;
+  let purple_entry = metadata_locale.entry_from_id(purple_item_id).ok_or_else(|| {
+    ManualInsertGachaRecordsErrorKind::MissingDefaultMetadataEntry {
+      business,
+      locale: metadata_locale_name.clone(),
+      item_id: purple_item_id,
+    }
+  })?;
+
+  let start_time = end_time - Duration::seconds((pull_count - 1) as i64);
+  let mut records = Vec::with_capacity(pull_count as usize);
+
+  for index in 0..pull_count {
+    let pull_number = index + 1;
+    let time = start_time + Duration::seconds(index as i64);
+
+    let (name, item_type, item_id, rank_type) = if pull_number == pull_count {
+      (
+        five_star_entry.name.to_owned(),
+        five_star_entry.category_name.to_owned(),
+        five_star_entry.id,
+        five_star_entry.rank as u32,
+      )
+    } else if pull_number % 8 == 0 {
+      (
+        purple_entry.name.to_owned(),
+        purple_entry.category_name.to_owned(),
+        purple_entry.id,
+        purple_entry.rank as u32,
+      )
+    } else {
+      (
+        blue_entry.name.to_owned(),
+        blue_entry.category_name.to_owned(),
+        blue_entry.id,
+        blue_entry.rank as u32,
+      )
+    };
+
+    let unix_ts = time.unix_timestamp();
+    let id = format!("{unix_ts}{index:09}");
+
+    records.push(GachaRecord {
+      business,
+      uid,
+      id,
+      gacha_type,
+      gacha_id: match business {
+        Business::HonkaiStarRail | Business::ZenlessZoneZero => Some(unix_ts.max(0) as u32),
+        _ => None,
+      },
+      rank_type,
+      count: 1,
+      lang: metadata_locale_name.clone(),
+      time,
+      name,
+      item_type,
+      item_id,
+      properties: None,
+    });
+  }
+
+  GachaRecordQuestioner::create_gacha_records(
+    database.as_ref(),
+    records,
+    GachaRecordSaveOnConflict::Nothing,
+    None,
+  )
+  .await
+  .map_err(|cause| {
+    ManualInsertGachaRecordsErrorKind::Sqlx {
+      cause: cause.to_string(),
+    }
+    .into()
+  })
 }
 
 #[tauri::command]

@@ -161,6 +161,16 @@ export default {
         MissingMetadataEntry: '缺失元数据条目：{{business}}，语言：{{locale}}，名称：{{name}}',
         InconsistentUid: '抽卡链接的拥有者 UID 不匹配：{{actuals}} (预期：{{expected}})',
       },
+      ManualInsertGachaRecordsError: {
+        UnsupportedBusiness: '暂不支持该业务：{{business}}',
+        UnsupportedGachaType: '不支持的卡池类型：{{gacha_type}} ({{business}})',
+        InvalidPullCount: '无效的抽数：{{pull_count}}',
+        MissingMetadataLocale: '缺失元数据语言：{{business}}，语言：{{locale}}',
+        CharacterNotFound: '未找到角色条目：{{name}} ({{business}} / {{locale}})',
+        InvalidCharacter: '该角色不是可用的五星角色：{{name}} ({{business}} / {{locale}})',
+        MissingDefaultMetadataEntry: '缺失默认物品元数据条目：{{item_id}} ({{business}} / {{locale}})',
+        Sqlx: '数据库错误：{{cause}}',
+      },
       LegacyUigfGachaRecordsWriteError: {
         InvalidUid: '无效的业务 UID：{{uid}}',
         IncompatibleRecordBusiness: '不兼容的记录业务：{{business}}，ID：{{id}}，名称：{{name}}，游标：{{cursor}}',
@@ -348,6 +358,7 @@ export default {
               More: '更多操作',
               FullUpdateBtn: '全量更新',
               ManualInputBtn: '手动输入链接',
+              ManualInsertBtn: '手动插入记录',
               ManualInputDialog: {
                 Title: '手动输入链接：',
                 Placeholder: '带有完整参数的 URL 抽卡链接：\n{{example}}',
@@ -356,9 +367,42 @@ export default {
                 CancelBtn: '取消',
                 SubmitBtn: '确定',
               },
+              ManualInsertDialog: {
+                Title: '手动插入记录：',
+                GachaType: {
+                  Label: '卡池',
+                },
+                FiveStarName: {
+                  Label: '5星角色名',
+                  Placeholder: '请输入游戏内角色名称（需与当前语言一致）',
+                  Required: '请输入 5 星角色名。',
+                },
+                PullCount: {
+                  Label: '抽数',
+                  Placeholder: '例如：75',
+                  Required: '请输入抽数。',
+                  ValidateMin: '抽数必须大于 0。',
+                  ValidateMax: '抽数不能超过 5000。',
+                },
+                EndTime: {
+                  Label: '抽中时间',
+                  Required: '请选择抽中时间。',
+                  Validate: '请输入有效的时间。',
+                },
+                CancelBtn: '取消',
+                SubmitBtn: '插入',
+              },
               Obtain: {
                 Loading: '获取$t(Business.{{keyofBusinesses}}.Gacha.Name)链接...',
                 Error: '获取$t(Business.{{keyofBusinesses}}.Gacha.Name)链接失败：',
+              },
+              ManualInsert: {
+                Loading: '手动插入$t(Business.{{keyofBusinesses}}.Gacha.Name)记录...',
+                Success: {
+                  Title: '手动插入成功：',
+                  Body: '新增 {{changes}} 条记录。',
+                },
+                Error: '手动插入失败：',
               },
               Fetch: {
                 Loading: '拉取$t(Business.{{keyofBusinesses}}.Gacha.Name)记录...',

@@ -644,6 +644,19 @@ export type CreateGachaRecordsFetcherArgs<T extends Business> = NonNullable<{
 export type CreateGachaRecordsFetcher = <T extends Business>(args: CreateGachaRecordsFetcherArgs<T>) => Promise<number>
 export const createGachaRecordsFetcher: CreateGachaRecordsFetcher = declareCommand('business_create_gacha_records_fetcher')
 
+export type ManualInsertGachaRecordsArgs<T extends Business> = NonNullable<{
+  business: T
+  uid: Account['uid']
+  gachaType: GachaRecord<T>['gachaType']
+  fiveStarName: string
+  pullCount: number
+  endTime: string | Date
+  customLocale?: string
+}>
+
+export type ManualInsertGachaRecords = <T extends Business>(args: ManualInsertGachaRecordsArgs<T>) => Promise<number>
+export const manualInsertGachaRecords: ManualInsertGachaRecords = declareCommand('business_manual_insert_gacha_records')
+
 export enum GachaRecordsFetcherFragmentKind {
   Sleeping = 'Sleeping',
   Ready = 'Ready',
@@ -721,6 +734,7 @@ const BusinessCommands = {
   fromWebCachesGachaUrl,
   fromDirtyGachaUrl,
   createGachaRecordsFetcher,
+  manualInsertGachaRecords,
   importGachaRecords,
   exportGachaRecords,
   findAndPrettyGachaRecords,

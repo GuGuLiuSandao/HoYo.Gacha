@@ -171,6 +171,16 @@ export default {
         MissingMetadataEntry: 'Missing metadata entry: {{business}}, locale: {{locale}}, name: {{name}}',
         InconsistentUid: 'Owner uid of the gacha url does not match: {{actuals}} (expected: {{expected}})',
       },
+      ManualInsertGachaRecordsError: {
+        UnsupportedBusiness: 'This business is not supported: {{business}}',
+        UnsupportedGachaType: 'Unsupported gacha type: {{gacha_type}} ({{business}})',
+        InvalidPullCount: 'Invalid pull count: {{pull_count}}',
+        MissingMetadataLocale: 'Missing metadata locale: {{business}}, locale: {{locale}}',
+        CharacterNotFound: 'Character entry not found: {{name}} ({{business}} / {{locale}})',
+        InvalidCharacter: 'The character is not a supported 5-star entry: {{name}} ({{business}} / {{locale}})',
+        MissingDefaultMetadataEntry: 'Missing default metadata entry: {{item_id}} ({{business}} / {{locale}})',
+        Sqlx: 'Database error: {{cause}}',
+      },
       LegacyUigfGachaRecordsWriteError: {
         InvalidUid: 'Invalid business uid: {{uid}}',
         IncompatibleRecordBusiness: 'Incompatible record business: {{business}}, id: {{id}}, name: {{name}}, cursor: {{cursor}}',
@@ -358,6 +368,7 @@ export default {
               More: 'More options',
               FullUpdateBtn: 'Full update',
               ManualInputBtn: 'Manual input URL',
+              ManualInsertBtn: 'Manual insert records',
               ManualInputDialog: {
                 Title: 'Manual input URL:',
                 Placeholder: 'A Gacha URL with full parameters:\n{{example}}',
@@ -366,9 +377,42 @@ export default {
                 CancelBtn: 'Cancel',
                 SubmitBtn: 'Submit',
               },
+              ManualInsertDialog: {
+                Title: 'Manual Insert Records:',
+                GachaType: {
+                  Label: 'Banner',
+                },
+                FiveStarName: {
+                  Label: '5-star character name',
+                  Placeholder: 'Enter the in-game character name (must match current locale)',
+                  Required: 'Please enter a 5-star character name.',
+                },
+                PullCount: {
+                  Label: 'Pull count',
+                  Placeholder: 'e.g. 75',
+                  Required: 'Please enter pull count.',
+                  ValidateMin: 'Pull count must be greater than 0.',
+                  ValidateMax: 'Pull count must be less than or equal to 5000.',
+                },
+                EndTime: {
+                  Label: 'Time of pull',
+                  Required: 'Please select the pull time.',
+                  Validate: 'Please enter a valid time.',
+                },
+                CancelBtn: 'Cancel',
+                SubmitBtn: 'Insert',
+              },
               Obtain: {
                 Loading: 'Obtaining $t(Business.{{keyofBusinesses}}.Gacha.Name) URL...',
                 Error: 'Failed to obtain $t(Business.{{keyofBusinesses}}.Gacha.Name) URL:',
+              },
+              ManualInsert: {
+                Loading: 'Manually inserting $t(Business.{{keyofBusinesses}}.Gacha.Name) records...',
+                Success: {
+                  Title: 'Manual insert succeeded:',
+                  Body: 'Added {{changes}} records.',
+                },
+                Error: 'Manual insert failed:',
               },
               Fetch: {
                 Loading: 'Fetching $t(Business.{{keyofBusinesses}}.Gacha.Name) Records...',
