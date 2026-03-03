@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use tauri::{Emitter, WebviewWindow};
 use time::format_description::FormatItem;
+use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
 use time::{Duration, OffsetDateTime};
 use tokio::sync::mpsc;
@@ -47,6 +48,9 @@ declare_error_kinds! {
 
     #[error("Invalid pull count: {pull_count}")]
     InvalidPullCount { pull_count: u32 },
+
+    #[error("Invalid end time format: {value}, cause: {cause}")]
+    InvalidEndTime { value: String, cause: String },
 
     #[error("Missing metadata locale: {locale} ({business})")]
     MissingMetadataLocale { business: Business, locale: String },
@@ -257,7 +261,7 @@ pub async fn business_manual_insert_gacha_records(
   gacha_type: u32,
   five_star_name: String,
   pull_count: u32,
-  end_time: OffsetDateTime,
+  end_time: String,
   custom_locale: Option<String>,
 ) -> Result<u64, ManualInsertGachaRecordsError> {
   if !is_supported_manual_insert_gacha_type(business, gacha_type) {
@@ -270,6 +274,13 @@ pub async fn business_manual_insert_gacha_records(
   if pull_count == 0 || pull_count > MANUAL_INSERT_PULL_COUNT_MAX {
     return Err(ManualInsertGachaRecordsErrorKind::InvalidPullCount { pull_count })?;
   }
+
+  let end_time = OffsetDateTime::parse(&end_time, &Rfc3339).map_err(|cause| {
+    ManualInsertGachaRecordsErrorKind::InvalidEndTime {
+      value: end_time,
+      cause: cause.to_string(),
+    }
+  })?;
 
   let locale = custom_locale
     .or_else(|| consts::LOCALE.value.clone())

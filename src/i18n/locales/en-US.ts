@@ -175,6 +175,7 @@ export default {
         UnsupportedBusiness: 'This business is not supported: {{business}}',
         UnsupportedGachaType: 'Unsupported gacha type: {{gacha_type}} ({{business}})',
         InvalidPullCount: 'Invalid pull count: {{pull_count}}',
+        InvalidEndTime: 'Invalid end time format: {{value}} ({{cause}})',
         MissingMetadataLocale: 'Missing metadata locale: {{business}}, locale: {{locale}}',
         CharacterNotFound: 'Character entry not found: {{name}} ({{business}} / {{locale}})',
         InvalidCharacter: 'The character is not a supported 5-star entry: {{name}} ({{business}} / {{locale}})',

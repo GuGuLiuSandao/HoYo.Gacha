@@ -165,6 +165,7 @@ export default {
         UnsupportedBusiness: '暂不支持该业务：{{business}}',
         UnsupportedGachaType: '不支持的卡池类型：{{gacha_type}} ({{business}})',
         InvalidPullCount: '无效的抽数：{{pull_count}}',
+        InvalidEndTime: '无效的抽中时间格式：{{value}} ({{cause}})',
         MissingMetadataLocale: '缺失元数据语言：{{business}}，语言：{{locale}}',
         CharacterNotFound: '未找到角色条目：{{name}} ({{business}} / {{locale}})',
         InvalidCharacter: '该角色不是可用的五星角色：{{name}} ({{business}} / {{locale}})',
