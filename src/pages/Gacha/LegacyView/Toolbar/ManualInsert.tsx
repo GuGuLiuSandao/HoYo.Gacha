@@ -72,6 +72,15 @@ type FormData = {
   endTime: string
 }
 
+type ManualInsertGachaType = ManualInsertGachaRecordsArgs<Business>['gachaType']
+
+function isManualInsertGachaType (
+  value: number,
+  options: Array<{ value: number }>,
+): value is ManualInsertGachaType {
+  return options.some((option) => option.value === value)
+}
+
 const ManualInsertDialog = forwardRef<{
   setOpen: React.Dispatch<React.SetStateAction<boolean>>
 }, {
@@ -125,6 +134,11 @@ const ManualInsertDialog = forwardRef<{
       return
     }
 
+    const gachaType = Number.parseInt(data.gachaType, 10)
+    if (!Number.isSafeInteger(gachaType) || !isManualInsertGachaType(gachaType, gachaTypeOptions)) {
+      return
+    }
+
     const date = dayjs(data.endTime)
     if (!date.isValid()) {
       setError('endTime', {
@@ -136,7 +150,7 @@ const ManualInsertDialog = forwardRef<{
     const args: ManualInsertGachaRecordsArgs<Business> = {
       business,
       uid: selectedAccount.uid,
-      gachaType: Number.parseInt(data.gachaType, 10),
+      gachaType,
       fiveStarName: data.fiveStarName.trim(),
       pullCount,
       endTime: date.format('YYYY-MM-DDTHH:mm:ssZ'),
@@ -185,7 +199,7 @@ const ManualInsertDialog = forwardRef<{
     invalidatePrettizedGachaRecordsQuery(selectedAccount.business, selectedAccount.uid, i18n.constants.gacha)
     invalidateFirstGachaRecordQuery(selectedAccount.business, selectedAccount.uid)
     close()
-  }, [business, close, i18n, keyofBusinesses, notifier, selectedAccount, setError, updateAccountPropertiesMutation])
+  }, [business, close, gachaTypeOptions, i18n, keyofBusinesses, notifier, selectedAccount, setError, updateAccountPropertiesMutation])
 
   return (
     <Dialog modalType="alert" open={open}>
