@@ -153,7 +153,7 @@ const ManualInsertDialog = forwardRef<{
       gachaType,
       fiveStarName: data.fiveStarName.trim(),
       pullCount,
-      endTime: date.format('YYYY-MM-DDTHH:mm:ssZ'),
+      endTime: date.toDate().toISOString(),
       customLocale: i18n.constants.gacha,
     }
 
