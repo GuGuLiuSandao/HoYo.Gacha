@@ -307,6 +307,13 @@ impl GachaMetadataLocale {
     self.entries.get(&id).map(|entry| self.entry_ref(entry, id))
   }
 
+  pub fn entries<'a>(&'a self) -> impl Iterator<Item = GachaMetadataEntryRef<'a>> + 'a {
+    self
+      .entries
+      .iter()
+      .map(|(id, entry)| self.entry_ref(entry, *id))
+  }
+
   pub fn entry_from_name<'a, 'name: 'a>(
     &'a self,
     name: &'name str,

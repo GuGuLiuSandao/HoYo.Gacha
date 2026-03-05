@@ -1,11 +1,12 @@
 use std::collections::{HashMap, hash_map};
 use std::path::PathBuf;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{Emitter, WebviewWindow};
 use time::format_description::FormatItem;
 use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
+use time::serde::rfc3339;
 use time::{Duration, OffsetDateTime};
 use tokio::sync::mpsc;
 
@@ -360,6 +361,92 @@ pub async fn business_create_gacha_records_fetcher(
       Ok(changes)
     }
   }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualInsertUpBanner {
+  #[serde(with = "rfc3339")]
+  pub start_time: OffsetDateTime,
+  #[serde(with = "rfc3339")]
+  pub end_time: OffsetDateTime,
+  pub version: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualInsertEntryOption {
+  pub item_id: u32,
+  pub name: String,
+  pub item_type: String,
+  pub rank_type: u8,
+  pub up_banners: Vec<ManualInsertUpBanner>,
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn business_manual_insert_gacha_entry_options(
+  business: Business,
+  gacha_type: u32,
+  custom_locale: Option<String>,
+) -> Result<Vec<ManualInsertEntryOption>, ManualInsertGachaRecordsError> {
+  if !is_supported_manual_insert_gacha_type(business, gacha_type) {
+    return Err(ManualInsertGachaRecordsErrorKind::UnsupportedGachaType {
+      business,
+      gacha_type,
+    })?;
+  }
+
+  let locale = custom_locale
+    .or_else(|| consts::LOCALE.value.clone())
+    .unwrap_or_else(|| String::from("en-us"));
+
+  let metadata = GachaMetadata::current();
+  let metadata_locale = metadata.locale(business, &locale).ok_or_else(|| {
+    ManualInsertGachaRecordsErrorKind::MissingMetadataLocale {
+      business,
+      locale: locale.clone(),
+    }
+  })?;
+
+  let allowed_categories = manual_insert_supported_golden_categories(business, gacha_type)?;
+  let golden_rank = manual_insert_required_golden_rank(business)?;
+  let banners = metadata.banners(business, gacha_type).unwrap_or(&[]);
+
+  let mut entries = metadata_locale
+    .entries()
+    .filter(|entry| manual_insert_entry_match(entry, allowed_categories, golden_rank))
+    .map(|entry| {
+      let mut up_banners = banners
+        .iter()
+        .filter(|banner| banner.in_up_golden(entry.id))
+        .map(|banner| ManualInsertUpBanner {
+          start_time: banner.start_time,
+          end_time: banner.end_time,
+          version: banner.version.as_ref().map(ToString::to_string),
+        })
+        .collect::<Vec<_>>();
+
+      up_banners.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+
+      ManualInsertEntryOption {
+        item_id: entry.id,
+        name: entry.name.to_owned(),
+        item_type: entry.category_name.to_owned(),
+        rank_type: entry.rank,
+        up_banners,
+      }
+    })
+    .collect::<Vec<_>>();
+
+  entries.sort_by(|a, b| {
+    a.item_type
+      .cmp(&b.item_type)
+      .then_with(|| a.name.cmp(&b.name))
+      .then_with(|| a.item_id.cmp(&b.item_id))
+  });
+
+  Ok(entries)
 }
 
 #[tauri::command]

@@ -385,8 +385,16 @@ export default {
                 },
                 FiveStarName: {
                   Label: '5-star item name',
-                  Placeholder: 'Enter an in-game 5-star name (character/weapon/light cone/W-Engine/Bangboo)',
+                  Placeholder: 'Select a 5-star item',
+                  Loading: 'Loading available 5-star items...',
+                  Empty: 'No selectable 5-star items in this banner',
                   Required: 'Please enter a 5-star item name.',
+                },
+                UpBanner: {
+                  Label: 'UP banner time',
+                  Placeholder: 'Select an UP banner period',
+                  Empty: 'No UP banner record for this item',
+                  Help: 'After selection, the pull time will auto-fill with that banner end time.',
                 },
                 PullCount: {
                   Label: 'Pull count',
@@ -409,6 +417,7 @@ export default {
               },
               ManualInsert: {
                 Loading: 'Manually inserting $t(Business.{{keyofBusinesses}}.Gacha.Name) records...',
+                LoadEntryOptionsError: 'Failed to load selectable entries for manual insert:',
                 Success: {
                   Title: 'Manual insert succeeded:',
                   Body: 'Added {{changes}} records.',

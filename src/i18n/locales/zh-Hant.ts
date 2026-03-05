@@ -375,8 +375,16 @@ export default {
                 },
                 FiveStarName: {
                   Label: '5星名稱',
-                  Placeholder: '請輸入遊戲內5星名稱（角色/武器/光錐/音擎/邦布）',
+                  Placeholder: '請選擇一個 5 星條目',
+                  Loading: '正在載入可選 5 星條目...',
+                  Empty: '目前卡池沒有可選 5 星條目',
                   Required: '請輸入 5 星名稱。',
+                },
+                UpBanner: {
+                  Label: 'UP池時間',
+                  Placeholder: '請選擇一個 UP 池時間',
+                  Empty: '該條目暫無 UP 池記錄',
+                  Help: '選擇後將自動把「抽中時間」填入為該 UP 池結束時間。',
                 },
                 PullCount: {
                   Label: '抽數',
@@ -399,6 +407,7 @@ export default {
               },
               ManualInsert: {
                 Loading: '手動插入$t(Business.{{keyofBusinesses}}.Gacha.Name)記錄中...',
+                LoadEntryOptionsError: '載入手動插入可選條目失敗：',
                 Success: {
                   Title: '手動插入成功：',
                   Body: '新增 {{changes}} 條記錄。',

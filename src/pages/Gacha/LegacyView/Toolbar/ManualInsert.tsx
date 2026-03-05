@@ -2,7 +2,13 @@ import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo
 import { SubmitHandler, useForm } from 'react-hook-form'
 import { Button, Dialog, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Select, makeStyles, tokens } from '@fluentui/react-components'
 import { produce } from 'immer'
-import { ManualInsertGachaRecordsArgs, manualInsertGachaRecords } from '@/api/commands/business'
+import {
+  ManualInsertEntryOption,
+  ManualInsertGachaEntryOptionsArgs,
+  ManualInsertGachaRecordsArgs,
+  manualInsertGachaEntryOptions,
+  manualInsertGachaRecords,
+} from '@/api/commands/business'
 import errorTranslation from '@/api/errorTranslation'
 import { useSelectedAccountSuspenseQueryData, useUpdateAccountPropertiesMutation } from '@/api/queries/accounts'
 import { invalidateFirstGachaRecordQuery, invalidatePrettizedGachaRecordsQuery } from '@/api/queries/business'
@@ -18,6 +24,11 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     rowGap: tokens.spacingVerticalS,
     minWidth: '24rem',
+  },
+  hint: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+    marginTop: tokens.spacingVerticalXXS,
   },
   actions: {
     display: 'flex',
@@ -60,14 +71,14 @@ const ManualInsertGachaTypeOptions: Record<number, Array<{
 
 const defaultFormValues = (business: Business) => ({
   gachaType: String(ManualInsertGachaTypeOptions[business]?.[0]?.value ?? ''),
-  fiveStarName: '',
+  fiveStarItemId: '',
   pullCount: '1',
   endTime: dayjs().format('YYYY-MM-DDTHH:mm:ss'),
 })
 
 type FormData = {
   gachaType: string
-  fiveStarName: string
+  fiveStarItemId: string
   pullCount: string
   endTime: string
 }
@@ -90,6 +101,9 @@ const ManualInsertDialog = forwardRef<{
   const { business, keyofBusinesses } = props
   const styles = useStyles()
   const [open, setOpen] = useState(false)
+  const [entryOptions, setEntryOptions] = useState<ManualInsertEntryOption[]>([])
+  const [loadingEntryOptions, setLoadingEntryOptions] = useState(false)
+  const [selectedUpBannerIndex, setSelectedUpBannerIndex] = useState('')
   const i18n = useI18n()
   const notifier = useNotifier()
   const selectedAccount = useSelectedAccountSuspenseQueryData(keyofBusinesses)
@@ -103,23 +117,129 @@ const ManualInsertDialog = forwardRef<{
 
   const {
     register,
+    watch,
+    getValues,
     handleSubmit,
     reset,
     setError,
+    setValue,
     formState: { errors, isValid, isSubmitting },
   } = useForm<FormData>({
     mode: 'onChange',
     defaultValues: defaultFormValues(business),
   })
 
+  const watchedGachaType = watch('gachaType')
+  const watchedItemId = watch('fiveStarItemId')
+
+  const selectedEntry = useMemo(() => {
+    return entryOptions.find((entry) => String(entry.itemId) === watchedItemId) ?? null
+  }, [entryOptions, watchedItemId])
+
   useEffect(() => {
     reset(defaultFormValues(business))
+    setEntryOptions([])
+    setSelectedUpBannerIndex('')
   }, [business, reset])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const gachaType = Number.parseInt(watchedGachaType, 10)
+    if (!Number.isSafeInteger(gachaType) || !isManualInsertGachaType(gachaType, gachaTypeOptions)) {
+      setEntryOptions([])
+      setSelectedUpBannerIndex('')
+      setValue('fiveStarItemId', '', {
+        shouldValidate: true,
+      })
+      return
+    }
+
+    let disposed = false
+    setLoadingEntryOptions(true)
+
+    const args: ManualInsertGachaEntryOptionsArgs<Business> = {
+      business,
+      gachaType,
+      customLocale: i18n.constants.gacha,
+    }
+
+    manualInsertGachaEntryOptions(args)
+      .then((entries) => {
+        if (disposed) {
+          return
+        }
+
+        setEntryOptions(entries)
+        const currentItemId = getValues('fiveStarItemId')
+        const hasSelectedItem = entries.some((entry) => String(entry.itemId) === currentItemId)
+
+        if (!hasSelectedItem) {
+          setValue('fiveStarItemId', '', {
+            shouldValidate: true,
+          })
+        }
+
+        setSelectedUpBannerIndex('')
+      })
+      .catch((error) => {
+        if (disposed) {
+          return
+        }
+
+        setEntryOptions([])
+        setSelectedUpBannerIndex('')
+        setValue('fiveStarItemId', '', {
+          shouldValidate: true,
+        })
+        notifier.error(
+          i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsert.LoadEntryOptionsError', { keyofBusinesses }),
+          {
+            body: errorTranslation(i18n, error),
+            timeout: notifier.DefaultTimeouts.error * 2,
+            dismissible: true,
+          },
+        )
+      })
+      .finally(() => {
+        if (!disposed) {
+          setLoadingEntryOptions(false)
+        }
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [business, gachaTypeOptions, getValues, i18n, keyofBusinesses, notifier, open, setValue, watchedGachaType])
 
   const close = useCallback(() => {
     reset(defaultFormValues(business))
+    setEntryOptions([])
+    setSelectedUpBannerIndex('')
     setOpen(false)
   }, [business, reset])
+
+  const handleUpBannerSelect = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedIndex = event.target.value
+    setSelectedUpBannerIndex(selectedIndex)
+
+    const parsedIndex = Number.parseInt(selectedIndex, 10)
+    if (!selectedEntry || !Number.isSafeInteger(parsedIndex)) {
+      return
+    }
+
+    const banner = selectedEntry.upBanners[parsedIndex]
+    if (!banner) {
+      return
+    }
+
+    setValue('endTime', dayjs(banner.endTime).format('YYYY-MM-DDTHH:mm:ss'), {
+      shouldValidate: true,
+      shouldDirty: true,
+    })
+  }, [selectedEntry, setValue])
 
   const handleSubmitInner = useCallback<SubmitHandler<FormData>>(async (data) => {
     if (!selectedAccount) {
@@ -139,6 +259,13 @@ const ManualInsertDialog = forwardRef<{
       return
     }
 
+    if (!selectedEntry) {
+      setError('fiveStarItemId', {
+        message: i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.FiveStarName.Required'),
+      })
+      return
+    }
+
     const date = dayjs(data.endTime)
     if (!date.isValid()) {
       setError('endTime', {
@@ -151,7 +278,7 @@ const ManualInsertDialog = forwardRef<{
       business,
       uid: selectedAccount.uid,
       gachaType,
-      fiveStarName: data.fiveStarName.trim(),
+      fiveStarName: selectedEntry.name,
       pullCount,
       endTime: date.toDate().toISOString(),
       customLocale: i18n.constants.gacha,
@@ -199,7 +326,18 @@ const ManualInsertDialog = forwardRef<{
     invalidatePrettizedGachaRecordsQuery(selectedAccount.business, selectedAccount.uid, i18n.constants.gacha)
     invalidateFirstGachaRecordQuery(selectedAccount.business, selectedAccount.uid)
     close()
-  }, [business, close, gachaTypeOptions, i18n, keyofBusinesses, notifier, selectedAccount, setError, updateAccountPropertiesMutation])
+  }, [
+    business,
+    close,
+    gachaTypeOptions,
+    i18n,
+    keyofBusinesses,
+    notifier,
+    selectedAccount,
+    selectedEntry,
+    setError,
+    updateAccountPropertiesMutation,
+  ])
 
   return (
     <Dialog modalType="alert" open={open}>
@@ -237,20 +375,60 @@ const ManualInsertDialog = forwardRef<{
               </Field>
               <Field
                 size="large"
-                validationState={errors.fiveStarName ? 'error' : isValid ? 'success' : 'none'}
-                validationMessage={errors.fiveStarName?.message}
+                validationState={errors.fiveStarItemId ? 'error' : isValid ? 'success' : 'none'}
+                validationMessage={errors.fiveStarItemId?.message}
                 label={<Locale mapping={['Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.FiveStarName.Label']} />}
                 required
               >
-                <Input
-                  autoComplete="off"
+                <Select
                   appearance="filled-darker"
-                  disabled={isSubmitting}
-                  placeholder={i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.FiveStarName.Placeholder')}
-                  {...register('fiveStarName', {
+                  disabled={isSubmitting || loadingEntryOptions || entryOptions.length === 0}
+                  {...register('fiveStarItemId', {
                     required: i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.FiveStarName.Required'),
                   })}
-                />
+                >
+                  <option value="">
+                    {loadingEntryOptions
+                      ? i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.FiveStarName.Loading')
+                      : entryOptions.length === 0
+                        ? i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.FiveStarName.Empty')
+                        : i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.FiveStarName.Placeholder')
+                    }
+                  </option>
+                  {entryOptions.map((option) => (
+                    <option key={option.itemId} value={option.itemId}>
+                      {`${option.name} · ${option.itemType}`}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field
+                size="large"
+                label={<Locale mapping={['Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.UpBanner.Label']} />}
+              >
+                <Select
+                  appearance="filled-darker"
+                  value={selectedUpBannerIndex}
+                  disabled={isSubmitting || !selectedEntry || selectedEntry.upBanners.length === 0}
+                  onChange={handleUpBannerSelect}
+                >
+                  <option value="">
+                    {!selectedEntry
+                      ? i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.UpBanner.Placeholder')
+                      : selectedEntry.upBanners.length === 0
+                        ? i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.UpBanner.Empty')
+                        : i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.UpBanner.Placeholder')
+                    }
+                  </option>
+                  {selectedEntry?.upBanners.map((banner, index) => (
+                    <option key={`${banner.startTime}_${banner.endTime}_${index}`} value={index}>
+                      {(banner.version ?? '-') + ' | ' + dayjs(banner.startTime).format('YYYY-MM-DD HH:mm') + ' ~ ' + dayjs(banner.endTime).format('YYYY-MM-DD HH:mm')}
+                    </option>
+                  ))}
+                </Select>
+                <div className={styles.hint}>
+                  <Locale mapping={['Pages.Gacha.LegacyView.Toolbar.Url.ManualInsertDialog.UpBanner.Help']} />
+                </div>
               </Field>
               <Field
                 size="large"
