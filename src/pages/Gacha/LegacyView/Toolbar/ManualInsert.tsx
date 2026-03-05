@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react'
-import { SubmitHandler, useForm } from 'react-hook-form'
+import { SubmitHandler, useForm, useWatch } from 'react-hook-form'
 import { Button, Dialog, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Select, makeStyles, tokens } from '@fluentui/react-components'
 import { produce } from 'immer'
 import {
@@ -116,8 +116,8 @@ const ManualInsertDialog = forwardRef<{
   useImperativeHandle(ref, () => ({ setOpen }))
 
   const {
+    control,
     register,
-    watch,
     getValues,
     handleSubmit,
     reset,
@@ -129,8 +129,8 @@ const ManualInsertDialog = forwardRef<{
     defaultValues: defaultFormValues(business),
   })
 
-  const watchedGachaType = watch('gachaType')
-  const watchedItemId = watch('fiveStarItemId')
+  const watchedGachaType = useWatch({ control, name: 'gachaType' }) ?? ''
+  const watchedItemId = useWatch({ control, name: 'fiveStarItemId' }) ?? ''
 
   const selectedEntry = useMemo(() => {
     return entryOptions.find((entry) => String(entry.itemId) === watchedItemId) ?? null
@@ -166,8 +166,9 @@ const ManualInsertDialog = forwardRef<{
       customLocale: i18n.constants.gacha,
     }
 
-    manualInsertGachaEntryOptions(args)
-      .then((entries) => {
+    const loadEntryOptions = async () => {
+      try {
+        const entries = await manualInsertGachaEntryOptions(args)
         if (disposed) {
           return
         }
@@ -183,8 +184,7 @@ const ManualInsertDialog = forwardRef<{
         }
 
         setSelectedUpBannerIndex('')
-      })
-      .catch((error) => {
+      } catch (error) {
         if (disposed) {
           return
         }
@@ -202,12 +202,14 @@ const ManualInsertDialog = forwardRef<{
             dismissible: true,
           },
         )
-      })
-      .finally(() => {
+      } finally {
         if (!disposed) {
           setLoadingEntryOptions(false)
         }
-      })
+      }
+    }
+
+    void loadEntryOptions()
 
     return () => {
       disposed = true
