@@ -209,7 +209,7 @@ const ManualInsertDialog = forwardRef<{
       }
     }
 
-    loadEntryOptions().then(() => undefined)
+    loadEntryOptions().catch(() => undefined)
 
     return () => {
       disposed = true
