@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react'
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { SubmitHandler, useForm, useWatch } from 'react-hook-form'
 import { Button, Dialog, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Select, makeStyles, tokens } from '@fluentui/react-components'
 import { produce } from 'immer'
@@ -105,7 +105,10 @@ const ManualInsertDialog = forwardRef<{
   const [loadingEntryOptions, setLoadingEntryOptions] = useState(false)
   const [selectedUpBannerIndex, setSelectedUpBannerIndex] = useState('')
   const i18n = useI18n()
+  const gachaLocale = i18n.constants.gacha
   const notifier = useNotifier()
+  const i18nRef = useRef(i18n)
+  const notifierRef = useRef(notifier)
   const selectedAccount = useSelectedAccountSuspenseQueryData(keyofBusinesses)
   const updateAccountPropertiesMutation = useUpdateAccountPropertiesMutation()
   const gachaTypeOptions = useMemo(
@@ -137,20 +140,22 @@ const ManualInsertDialog = forwardRef<{
   }, [entryOptions, watchedItemId])
 
   useEffect(() => {
+    i18nRef.current = i18n
+    notifierRef.current = notifier
+  }, [i18n, notifier])
+
+  useEffect(() => {
     reset(defaultFormValues(business))
     setEntryOptions([])
     setSelectedUpBannerIndex('')
   }, [business, reset])
 
   useEffect(() => {
-    if (!open) {
-      return
-    }
-
     const gachaType = Number.parseInt(watchedGachaType, 10)
     if (!Number.isSafeInteger(gachaType) || !isManualInsertGachaType(gachaType, gachaTypeOptions)) {
       setEntryOptions([])
       setSelectedUpBannerIndex('')
+      setLoadingEntryOptions(false)
       setValue('fiveStarItemId', '', {
         shouldValidate: true,
       })
@@ -163,7 +168,7 @@ const ManualInsertDialog = forwardRef<{
     const args: ManualInsertGachaEntryOptionsArgs<Business> = {
       business,
       gachaType,
-      customLocale: i18n.constants.gacha,
+      customLocale: gachaLocale,
     }
 
     const loadEntryOptions = async () => {
@@ -194,11 +199,11 @@ const ManualInsertDialog = forwardRef<{
         setValue('fiveStarItemId', '', {
           shouldValidate: true,
         })
-        notifier.error(
-          i18n.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsert.LoadEntryOptionsError', { keyofBusinesses }),
+        notifierRef.current.error(
+          i18nRef.current.t('Pages.Gacha.LegacyView.Toolbar.Url.ManualInsert.LoadEntryOptionsError', { keyofBusinesses }),
           {
-            body: errorTranslation(i18n, error),
-            timeout: notifier.DefaultTimeouts.error * 2,
+            body: errorTranslation(i18nRef.current, error),
+            timeout: notifierRef.current.DefaultTimeouts.error * 2,
             dismissible: true,
           },
         )
@@ -214,7 +219,7 @@ const ManualInsertDialog = forwardRef<{
     return () => {
       disposed = true
     }
-  }, [business, gachaTypeOptions, getValues, i18n, keyofBusinesses, notifier, open, setValue, watchedGachaType])
+  }, [business, gachaLocale, gachaTypeOptions, getValues, keyofBusinesses, setValue, watchedGachaType])
 
   const close = useCallback(() => {
     reset(defaultFormValues(business))
@@ -283,7 +288,7 @@ const ManualInsertDialog = forwardRef<{
       fiveStarName: selectedEntry.name,
       pullCount,
       endTime: date.toDate().toISOString(),
-      customLocale: i18n.constants.gacha,
+      customLocale: gachaLocale,
     }
 
     const changes = await notifier.promise(
@@ -325,12 +330,13 @@ const ManualInsertDialog = forwardRef<{
       properties,
     })
 
-    invalidatePrettizedGachaRecordsQuery(selectedAccount.business, selectedAccount.uid, i18n.constants.gacha)
+    invalidatePrettizedGachaRecordsQuery(selectedAccount.business, selectedAccount.uid, gachaLocale)
     invalidateFirstGachaRecordQuery(selectedAccount.business, selectedAccount.uid)
     close()
   }, [
     business,
     close,
+    gachaLocale,
     gachaTypeOptions,
     i18n,
     keyofBusinesses,
