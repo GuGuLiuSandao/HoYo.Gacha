@@ -167,8 +167,8 @@ export default {
         InvalidPullCount: '無效的抽數：{{pull_count}}',
         InvalidEndTime: '無效的抽中時間格式：{{value}} ({{cause}})',
         MissingMetadataLocale: '缺失元資料語言：{{business}}，語言：{{locale}}',
-        CharacterNotFound: '未找到角色條目：{{name}} ({{business}} / {{locale}})',
-        InvalidCharacter: '該角色不是可用的五星角色：{{name}} ({{business}} / {{locale}})',
+        CharacterNotFound: '未找到條目：{{name}} ({{business}} / {{locale}})',
+        InvalidCharacter: '該條目不是當前卡池可用的五星條目：{{name}} ({{business}} / {{locale}})',
         MissingDefaultMetadataEntry: '缺失預設物品元資料條目：{{item_id}} ({{business}} / {{locale}})',
         Sqlx: '資料庫錯誤：{{cause}}',
       },
@@ -374,9 +374,9 @@ export default {
                   Label: '卡池',
                 },
                 FiveStarName: {
-                  Label: '5星角色名',
-                  Placeholder: '請輸入遊戲內角色名稱（需與當前語言一致）',
-                  Required: '請輸入 5 星角色名。',
+                  Label: '5星名稱',
+                  Placeholder: '請輸入遊戲內5星名稱（角色/武器/光錐/音擎/邦布）',
+                  Required: '請輸入 5 星名稱。',
                 },
                 PullCount: {
                   Label: '抽數',

@@ -92,18 +92,23 @@ fn is_supported_manual_insert_gacha_type(business: Business, gacha_type: u32) ->
   }
 }
 
-fn manual_insert_default_item_ids(business: Business) -> Result<(u32, u32), ManualInsertGachaRecordsError> {
+fn manual_insert_default_item_ids(
+  business: Business,
+) -> Result<(u32, u32), ManualInsertGachaRecordsError> {
   match business {
     Business::GenshinImpact => Ok((12305, 11401)),
     Business::HonkaiStarRail => Ok((20000, 21000)),
-    Business::ZenlessZoneZero => Ok((21002, 22002)),
+    // 2-star + 3-star W-Engine
+    Business::ZenlessZoneZero => Ok((12001, 13001)),
     Business::MiliastraWonderland => {
       Err(ManualInsertGachaRecordsErrorKind::UnsupportedBusiness { business })?
     }
   }
 }
 
-fn manual_insert_required_golden_rank(business: Business) -> Result<u8, ManualInsertGachaRecordsError> {
+fn manual_insert_required_golden_rank(
+  business: Business,
+) -> Result<u8, ManualInsertGachaRecordsError> {
   match business {
     Business::GenshinImpact | Business::HonkaiStarRail => Ok(5),
     Business::ZenlessZoneZero => Ok(4),
@@ -111,6 +116,111 @@ fn manual_insert_required_golden_rank(business: Business) -> Result<u8, ManualIn
       Err(ManualInsertGachaRecordsErrorKind::UnsupportedBusiness { business })?
     }
   }
+}
+
+const MANUAL_INSERT_CATEGORIES_CHARACTER: [&str; 1] = [GachaMetadata::CATEGORY_CHARACTER];
+const MANUAL_INSERT_CATEGORIES_WEAPON: [&str; 1] = [GachaMetadata::CATEGORY_WEAPON];
+const MANUAL_INSERT_CATEGORIES_BANGBOO: [&str; 1] = [GachaMetadata::CATEGORY_BANGBOO];
+const MANUAL_INSERT_CATEGORIES_CHARACTER_OR_WEAPON: [&str; 2] = [
+  GachaMetadata::CATEGORY_CHARACTER,
+  GachaMetadata::CATEGORY_WEAPON,
+];
+
+fn manual_insert_supported_golden_categories(
+  business: Business,
+  gacha_type: u32,
+) -> Result<&'static [&'static str], ManualInsertGachaRecordsError> {
+  let categories = match business {
+    Business::GenshinImpact => match gacha_type {
+      301 | 400 => &MANUAL_INSERT_CATEGORIES_CHARACTER[..],
+      302 => &MANUAL_INSERT_CATEGORIES_WEAPON[..],
+      100 | 200 | 500 => &MANUAL_INSERT_CATEGORIES_CHARACTER_OR_WEAPON[..],
+      _ => {
+        return Err(
+          ManualInsertGachaRecordsErrorKind::UnsupportedGachaType {
+            business,
+            gacha_type,
+          }
+          .into(),
+        );
+      }
+    },
+    Business::HonkaiStarRail => match gacha_type {
+      11 | 12 => &MANUAL_INSERT_CATEGORIES_CHARACTER[..],
+      21 | 22 => &MANUAL_INSERT_CATEGORIES_WEAPON[..],
+      1 | 2 => &MANUAL_INSERT_CATEGORIES_CHARACTER_OR_WEAPON[..],
+      _ => {
+        return Err(
+          ManualInsertGachaRecordsErrorKind::UnsupportedGachaType {
+            business,
+            gacha_type,
+          }
+          .into(),
+        );
+      }
+    },
+    Business::ZenlessZoneZero => match gacha_type {
+      1 | 102 => &MANUAL_INSERT_CATEGORIES_CHARACTER[..],
+      2 | 103 => &MANUAL_INSERT_CATEGORIES_WEAPON[..],
+      3 => &MANUAL_INSERT_CATEGORIES_CHARACTER_OR_WEAPON[..],
+      5 => &MANUAL_INSERT_CATEGORIES_BANGBOO[..],
+      _ => {
+        return Err(
+          ManualInsertGachaRecordsErrorKind::UnsupportedGachaType {
+            business,
+            gacha_type,
+          }
+          .into(),
+        );
+      }
+    },
+    Business::MiliastraWonderland => {
+      return Err(ManualInsertGachaRecordsErrorKind::UnsupportedBusiness { business }.into());
+    }
+  };
+
+  Ok(categories)
+}
+
+fn manual_insert_entry_name_candidates(name: &str) -> Vec<String> {
+  let name = name.trim();
+  let mut candidates = vec![name.to_owned()];
+
+  if !name.starts_with('「') && !name.ends_with('」') {
+    candidates.push(format!("「{name}」"));
+  }
+
+  if let Some(unwrapped) = name.strip_prefix('「').and_then(|s| s.strip_suffix('」'))
+    && !unwrapped.is_empty()
+  {
+    candidates.push(unwrapped.to_owned());
+  }
+
+  candidates
+}
+
+#[inline]
+fn manual_insert_entry_match(
+  entry: &GachaMetadataEntryRef<'_>,
+  allowed_categories: &[&'static str],
+  golden_rank: u8,
+) -> bool {
+  entry.rank == golden_rank
+    && allowed_categories
+      .iter()
+      .any(|category| *category == entry.category)
+}
+
+fn manual_insert_find_entry_in_locale<'a, 'name: 'a>(
+  locale: &'a GachaMetadataLocale,
+  name: &'name str,
+  allowed_categories: &[&'static str],
+  golden_rank: u8,
+) -> Option<GachaMetadataEntryRef<'a>> {
+  locale
+    .entry_from_name(name)?
+    .into_iter()
+    .find(|entry| manual_insert_entry_match(entry, allowed_categories, golden_rank))
 }
 
 // region: Tauri plugin
@@ -286,7 +396,8 @@ pub async fn business_manual_insert_gacha_records(
     .or_else(|| consts::LOCALE.value.clone())
     .unwrap_or_else(|| String::from("en-us"));
 
-  let metadata_locale = GachaMetadata::current().locale(business, &locale).ok_or_else(|| {
+  let metadata = GachaMetadata::current();
+  let metadata_locale = metadata.locale(business, &locale).ok_or_else(|| {
     ManualInsertGachaRecordsErrorKind::MissingMetadataLocale {
       business,
       locale: locale.clone(),
@@ -295,30 +406,65 @@ pub async fn business_manual_insert_gacha_records(
 
   let metadata_locale_name = metadata_locale.locale.clone();
   let golden_rank = manual_insert_required_golden_rank(business)?;
-  let five_star_entry = metadata_locale
-    .entry_from_name(&five_star_name)
-    .and_then(|entries| {
-      entries.into_iter().find(|entry| {
-        entry.category == GachaMetadata::CATEGORY_CHARACTER && entry.rank == golden_rank
-      })
-    })
-    .ok_or_else(|| {
-      let kind =
-        if metadata_locale.entry_from_name_first(&five_star_name).is_some() {
-          ManualInsertGachaRecordsErrorKind::InvalidCharacter {
-            business,
-            locale: metadata_locale_name.clone(),
-            name: five_star_name.clone(),
-          }
-        } else {
-          ManualInsertGachaRecordsErrorKind::CharacterNotFound {
-            business,
-            locale: metadata_locale_name.clone(),
-            name: five_star_name.clone(),
-          }
-        };
-      ManualInsertGachaRecordsError::from(kind)
-    })?;
+  let allowed_categories = manual_insert_supported_golden_categories(business, gacha_type)?;
+  let candidate_names = manual_insert_entry_name_candidates(&five_star_name);
+  let business_locales = metadata.metadata.get(&business).map(|data| &data.locales);
+
+  let mut name_exists = false;
+  let mut five_star_entry = None;
+  for candidate in &candidate_names {
+    if let Some(entry) = manual_insert_find_entry_in_locale(
+      metadata_locale,
+      candidate,
+      allowed_categories,
+      golden_rank,
+    ) {
+      five_star_entry = Some(entry);
+      break;
+    }
+
+    if let Some(locales) = business_locales {
+      for locale in locales.values() {
+        if locale.entry_from_name_first(candidate).is_some() {
+          name_exists = true;
+        }
+
+        if let Some(entry) =
+          manual_insert_find_entry_in_locale(locale, candidate, allowed_categories, golden_rank)
+            .and_then(|entry| metadata_locale.entry_from_id(entry.id))
+        {
+          five_star_entry = Some(entry);
+          break;
+        }
+      }
+    }
+
+    if five_star_entry.is_some() {
+      break;
+    }
+  }
+
+  let name_exists = name_exists
+    || candidate_names
+      .iter()
+      .any(|candidate| metadata_locale.entry_from_name_first(candidate).is_some());
+
+  let five_star_entry = five_star_entry.ok_or_else(|| {
+    let kind = if name_exists {
+      ManualInsertGachaRecordsErrorKind::InvalidCharacter {
+        business,
+        locale: metadata_locale_name.clone(),
+        name: five_star_name.clone(),
+      }
+    } else {
+      ManualInsertGachaRecordsErrorKind::CharacterNotFound {
+        business,
+        locale: metadata_locale_name.clone(),
+        name: five_star_name.clone(),
+      }
+    };
+    ManualInsertGachaRecordsError::from(kind)
+  })?;
 
   let (blue_item_id, purple_item_id) = manual_insert_default_item_ids(business)?;
   let blue_entry = metadata_locale.entry_from_id(blue_item_id).ok_or_else(|| {
@@ -328,13 +474,15 @@ pub async fn business_manual_insert_gacha_records(
       item_id: blue_item_id,
     }
   })?;
-  let purple_entry = metadata_locale.entry_from_id(purple_item_id).ok_or_else(|| {
-    ManualInsertGachaRecordsErrorKind::MissingDefaultMetadataEntry {
-      business,
-      locale: metadata_locale_name.clone(),
-      item_id: purple_item_id,
-    }
-  })?;
+  let purple_entry = metadata_locale
+    .entry_from_id(purple_item_id)
+    .ok_or_else(
+      || ManualInsertGachaRecordsErrorKind::MissingDefaultMetadataEntry {
+        business,
+        locale: metadata_locale_name.clone(),
+        item_id: purple_item_id,
+      },
+    )?;
 
   let start_time = end_time - Duration::seconds((pull_count - 1) as i64);
   let mut records = Vec::with_capacity(pull_count as usize);

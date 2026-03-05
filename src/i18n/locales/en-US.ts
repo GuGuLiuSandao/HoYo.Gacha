@@ -177,8 +177,8 @@ export default {
         InvalidPullCount: 'Invalid pull count: {{pull_count}}',
         InvalidEndTime: 'Invalid end time format: {{value}} ({{cause}})',
         MissingMetadataLocale: 'Missing metadata locale: {{business}}, locale: {{locale}}',
-        CharacterNotFound: 'Character entry not found: {{name}} ({{business}} / {{locale}})',
-        InvalidCharacter: 'The character is not a supported 5-star entry: {{name}} ({{business}} / {{locale}})',
+        CharacterNotFound: 'Entry not found: {{name}} ({{business}} / {{locale}})',
+        InvalidCharacter: 'This entry is not a supported 5-star item for this banner: {{name}} ({{business}} / {{locale}})',
         MissingDefaultMetadataEntry: 'Missing default metadata entry: {{item_id}} ({{business}} / {{locale}})',
         Sqlx: 'Database error: {{cause}}',
       },
@@ -384,9 +384,9 @@ export default {
                   Label: 'Banner',
                 },
                 FiveStarName: {
-                  Label: '5-star character name',
-                  Placeholder: 'Enter the in-game character name (must match current locale)',
-                  Required: 'Please enter a 5-star character name.',
+                  Label: '5-star item name',
+                  Placeholder: 'Enter an in-game 5-star name (character/weapon/light cone/W-Engine/Bangboo)',
+                  Required: 'Please enter a 5-star item name.',
                 },
                 PullCount: {
                   Label: 'Pull count',
