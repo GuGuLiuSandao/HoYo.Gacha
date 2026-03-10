@@ -28,7 +28,50 @@
       "More": {
         "Label": "更多操作",
         "FullUpdate": "全量更新",
-        "ManualInput": "手動輸入連結"
+        "ManualInput": "手動輸入連結",
+        "ManualInsert": "手動插入記錄"
+      },
+      "ManualInsertDialog": {
+        "Title": "手動插入記錄：",
+        "GachaType": {
+          "Label": "卡池"
+        },
+        "FiveStarName": {
+          "Label": "5星名稱",
+          "Placeholder": "請選擇一個 5 星條目",
+          "Loading": "正在載入可選 5 星條目...",
+          "Empty": "目前卡池沒有可選 5 星條目",
+          "Required": "請輸入 5 星名稱。"
+        },
+        "UpBanner": {
+          "Label": "UP池時間",
+          "Placeholder": "請選擇一個 UP 池時間",
+          "Empty": "此條目暫無 UP 池記錄",
+          "Help": "選擇後將自動把「抽中時間」填入為該 UP 池結束時間。"
+        },
+        "PullCount": {
+          "Label": "抽數",
+          "Placeholder": "例如：75",
+          "Required": "請輸入抽數。",
+          "ValidateMin": "抽數必須大於 0。",
+          "ValidateMax": "抽數不能超過 5000。"
+        },
+        "EndTime": {
+          "Label": "抽中時間",
+          "Required": "請選擇抽中時間。",
+          "Validate": "請輸入有效的時間。"
+        },
+        "CancelBtn": "取消",
+        "SubmitBtn": "插入"
+      },
+      "ManualInsert": {
+        "Loading": "手動插入$t(Common:{{keyof}}.Gacha.Name)記錄...",
+        "LoadEntryOptionsError": "載入手動插入可選條目失敗：",
+        "Success": {
+          "Title": "手動插入成功：",
+          "Body": "新增 {{changes}} 條記錄。"
+        },
+        "Error": "手動插入失敗："
       },
       "Obtain": {
         "Loading": "取得$t(Common:{{keyof}}.Gacha.Name)連結...",

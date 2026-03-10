@@ -228,6 +228,30 @@ pub struct PrettizedRecord<'a> {
 }
 
 impl<'a> PrettizedRecord<'a> {
+  fn should_infer_item_category(record: &GachaRecord) -> bool {
+    record
+      .properties
+      .as_ref()
+      .and_then(|properties| properties.get(GachaRecord::KEY_MANUAL_INSERT))
+      .and_then(|value| value.as_bool())
+      .unwrap_or(false)
+  }
+
+  fn infer_item_category_from_item_type(item_type: &str) -> Option<&'static str> {
+    match item_type.trim() {
+      // Character
+      "Character" | "角色" | "キャラクター" | "Agents" | "代理人" | "エージェント" => {
+        Some("Character")
+      }
+      // Weapon-like (includes Star Rail Light Cone and ZZZ W-Engine)
+      "Weapon" | "武器" | "Light Cone" | "光锥" | "光錐" | "光円錐" | "W-Engine" | "W-Engines"
+      | "音擎" | "音動機" => Some("Weapon"),
+      // Bangboo
+      "Bangboo" | "邦布" | "ボンプ" => Some("Bangboo"),
+      _ => None,
+    }
+  }
+
   pub fn mapping(
     metadata: &'a dyn Metadata,
     category: PrettizedCategory,
@@ -244,7 +268,13 @@ impl<'a> PrettizedRecord<'a> {
     let (item_id, item_name, item_category) = if let Some(entry) = metadata_entry {
       (entry.item_id, entry.item_name, Some(entry.category))
     } else {
-      (record.item_id, record.item_name.as_str(), None)
+      let item_category = if Self::should_infer_item_category(record) {
+        Self::infer_item_category_from_item_type(&record.item_type)
+      } else {
+        None
+      };
+
+      (record.item_id, record.item_name.as_str(), item_category)
     };
 
     let used_pity = pity.map(|n| {

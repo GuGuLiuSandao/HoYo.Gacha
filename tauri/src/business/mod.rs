@@ -4,5 +4,6 @@ pub mod gacha_fetcher;
 pub mod gacha_url;
 pub mod handlers;
 pub mod image_resolver;
+pub mod manual_insert;
 pub mod metadata;
 pub mod prettized;

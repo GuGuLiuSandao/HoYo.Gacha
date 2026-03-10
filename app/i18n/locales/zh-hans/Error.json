@@ -59,6 +59,17 @@
     "InvalidUid": "无效的 $t(Common:{{keyof}}.Name) 账号 UID 值：{{value}}",
     "MetadataEntry": "缺失元数据条目：$t(Common:{{keyof}}.Name)，语言：{{lang}}，物品名称：{{itemName}}"
   },
+  "ManualInsertGachaRecordsError": {
+    "UnsupportedBusiness": "暂不支持该业务：$t(Common:{{keyof}}.Name)",
+    "UnsupportedGachaType": "不支持的卡池类型：{{gacha_type}} ($t(Common:{{keyof}}.Name))",
+    "InvalidPullCount": "无效的抽数：{{pull_count}}",
+    "InvalidEndTime": "无效的抽中时间格式：{{value}} ({{cause}})",
+    "MissingMetadataLocale": "缺失元数据语言：$t(Common:{{keyof}}.Name)，语言：{{locale}}",
+    "CharacterNotFound": "未找到条目：{{name}} ($t(Common:{{keyof}}.Name) / {{locale}})",
+    "InvalidCharacter": "该条目不是当前卡池可用的五星条目：{{name}} ($t(Common:{{keyof}}.Name) / {{locale}})",
+    "MissingDefaultMetadataEntry": "缺失默认物品元数据条目：{{item_id}} ($t(Common:{{keyof}}.Name) / {{locale}})",
+    "Sqlx": "数据库错误：{{cause}}"
+  },
   "UigfError": {
     "UnsupportedVersion": "不受支持的 UIGF 版本：{{actual}}。预期：{{expected, list}}",
     "InvalidUid": "无效的 $t(Common:{{keyof}}.Name) 账号 UID 值：{{value}}",

@@ -1,14 +1,15 @@
 import { ComponentRef, MouseEventHandler, ReactNode, useCallback, useRef, useState } from 'react'
 import { Body1, Caption2, Dialog, DialogSurface, Field, Input, Menu, MenuDivider, MenuGroup, MenuGroupHeader, MenuItem, MenuList, MenuPopover, MenuTrigger, Spinner, SplitButton, Tooltip, makeStyles, mergeClasses, tokens } from '@fluentui/react-components'
-import { ArrowClockwiseRegular, ArrowSyncRegular, LinkEditRegular, LinkRegular } from '@fluentui/react-icons'
+import { AddRegular, ArrowClockwiseRegular, ArrowSyncRegular, LinkEditRegular, LinkRegular } from '@fluentui/react-icons'
 import { produce } from 'immer'
 import BusinessCommands, { FetchRecordsArgs, FetchRecordsEvent, FetchRecordsEventKind, GachaUrlRequestErrorKind, GachaUrl as IGachaUrl, SaveToDatabase, isGachaUrlRequestError } from '@/api/commands/business'
 import errorTrans from '@/api/errorTrans'
-import { Account, AccountBusiness, KeyofAccountBusiness } from '@/api/schemas/Account'
+import { Account, AccountBusiness, KeyofAccountBusiness, MiliastraWonderland } from '@/api/schemas/Account'
 import CopyButton from '@/components/CopyButton'
 import useDialogOpenEffect from '@/hooks/useDialogOpenEffect'
 import useRecordsFetcher from '@/hooks/useRecordsFetcher'
 import { Language, TFunction, WithTrans, i18nDayjs, languageMetadata, withTrans } from '@/i18n'
+import ManualInsertDialog from '@/pages/Gacha/components/ManualInsert/Dialog'
 import ManuallyUrlDialog from '@/pages/Gacha/components/ManuallyUrl/Dialog'
 import ToolbarContainer from '@/pages/Gacha/components/Toolbar/Container'
 import { useBusiness } from '@/pages/Gacha/contexts/Business'
@@ -28,6 +29,10 @@ export default function GachaUrl () {
       <UserAction />
     </ToolbarContainer>
   )
+}
+
+function isManualInsertSupported (business: AccountBusiness): boolean {
+  return business !== MiliastraWonderland
 }
 
 function computeDeadline (
@@ -188,6 +193,13 @@ const UserAction = withTrans.GachaPage(function ({ i18n, t }: WithTrans) {
     }
   }, [selected])
 
+  const manualInsertDialogRef = useRef<ComponentRef<typeof ManualInsertDialog>>(null)
+  const handleManualInsert = useCallback<MouseEventHandler>(() => {
+    if (selected && manualInsertDialogRef.current) {
+      manualInsertDialogRef.current.open(selected)
+    }
+  }, [selected])
+
   return (
     <>
       <Menu positioning="below-end">
@@ -230,6 +242,13 @@ const UserAction = withTrans.GachaPage(function ({ i18n, t }: WithTrans) {
               >
                 {t('Toolbar.GachaUrl.More.ManualInput')}
               </MenuItem>
+              <MenuItem
+                icon={<AddRegular />}
+                onClick={handleManualInsert}
+                disabled={!selected || !isManualInsertSupported(business.value)}
+              >
+                {t('Toolbar.GachaUrl.More.ManualInsert')}
+              </MenuItem>
             </MenuGroup>
           </MenuList>
         </MenuPopover>
@@ -248,6 +267,12 @@ const UserAction = withTrans.GachaPage(function ({ i18n, t }: WithTrans) {
         ref={manuallyUrlDialogRef}
         business={business.value}
       />
+      {isManualInsertSupported(business.value) && (
+        <ManualInsertDialog
+          ref={manualInsertDialogRef}
+          business={business.value}
+        />
+      )}
     </>
   )
 })

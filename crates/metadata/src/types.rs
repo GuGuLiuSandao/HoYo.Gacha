@@ -20,6 +20,8 @@ pub trait Metadata: fmt::Debug + Send + Sync {
 
   fn locales(&self, business_id: u8) -> Option<MapValues<'_, Arc<str>, Box<dyn MetadataLocale>>>;
 
+  fn banners(&self, business_id: u8, gacha_type: u32) -> Option<Vec<&dyn MetadataBanner>>;
+
   fn query_banner(
     &self,
     business_id: u8,

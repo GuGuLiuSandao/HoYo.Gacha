@@ -59,6 +59,17 @@
     "InvalidUid": "Invalid $t(Common:{{keyof}}.Name) account uid: {{value}}",
     "MetadataEntry": "Missing metadata entry: $t(Common:{{keyof}}.Name), lang: {{lang}}, itemName: {{itemName}}"
   },
+  "ManualInsertGachaRecordsError": {
+    "UnsupportedBusiness": "Unsupported business: $t(Common:{{keyof}}.Name)",
+    "UnsupportedGachaType": "Unsupported gacha type: {{gacha_type}} ($t(Common:{{keyof}}.Name))",
+    "InvalidPullCount": "Invalid pull count: {{pull_count}}",
+    "InvalidEndTime": "Invalid end time format: {{value}} ({{cause}})",
+    "MissingMetadataLocale": "Missing metadata locale: $t(Common:{{keyof}}.Name), locale: {{locale}}",
+    "CharacterNotFound": "Entry not found: {{name}} ($t(Common:{{keyof}}.Name) / {{locale}})",
+    "InvalidCharacter": "This entry is not a valid 5-star item for current banner: {{name}} ($t(Common:{{keyof}}.Name) / {{locale}})",
+    "MissingDefaultMetadataEntry": "Missing default metadata entry: {{item_id}} ($t(Common:{{keyof}}.Name) / {{locale}})",
+    "Sqlx": "Database error: {{cause}}"
+  },
   "UigfError": {
     "UnsupportedVersion": "Unsupported UIGF version: {{actual}}. Expected: {{expected, list}}",
     "InvalidUid": "Invalid $t(Common:{{keyof}}.Name) account uid: {{value}}",

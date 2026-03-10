@@ -283,6 +283,8 @@ fn command_handlers() -> Box<dyn Fn(Invoke<Wry>) -> bool + Send + Sync + 'static
     crate::business::handlers::business_locate_data_folder,
     crate::business::handlers::business_from_webcaches_gacha_url,
     crate::business::handlers::business_from_dirty_gacha_url,
+    crate::business::manual_insert::business_manual_insert_gacha_entry_options,
+    crate::business::manual_insert::business_manual_insert_gacha_records,
     crate::business::handlers::business_resolve_image_mime,
     crate::business::handlers::business_resolve_image,
     crate::business::handlers::business_pretty_records,

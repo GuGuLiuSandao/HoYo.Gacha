@@ -208,6 +208,20 @@ impl Metadata for MetadataImpl {
     Some(self.businesses.get(&business_id)?.locales.values())
   }
 
+  fn banners(&self, business_id: u8, gacha_type: u32) -> Option<Vec<&dyn MetadataBanner>> {
+    Some(
+      self
+        .businesses
+        .get(&business_id)?
+        .banners
+        .get(&gacha_type)?
+        .inner
+        .iter()
+        .map(Box::deref)
+        .collect(),
+    )
+  }
+
   fn query_banner(
     &self,
     business_id: u8,

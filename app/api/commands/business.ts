@@ -344,6 +344,114 @@ export type FetchRecordsEvent
 
 // #endregion
 
+// #region: Manual Insert
+
+export const NamedManualInsertGachaRecordsError = 'ManualInsertGachaRecordsError' as const
+export type NamedManualInsertGachaRecordsError = typeof NamedManualInsertGachaRecordsError
+
+export enum ManualInsertGachaRecordsErrorKind {
+  UnsupportedBusiness = 'UnsupportedBusiness',
+  UnsupportedGachaType = 'UnsupportedGachaType',
+  InvalidPullCount = 'InvalidPullCount',
+  InvalidEndTime = 'InvalidEndTime',
+  MissingMetadataLocale = 'MissingMetadataLocale',
+  CharacterNotFound = 'CharacterNotFound',
+  InvalidCharacter = 'InvalidCharacter',
+  MissingDefaultMetadataEntry = 'MissingDefaultMetadataEntry',
+  Sqlx = 'Sqlx',
+}
+
+export type ManualInsertGachaRecordsError = AppError<NamedManualInsertGachaRecordsError,
+  | {
+    kind: ManualInsertGachaRecordsErrorKind.UnsupportedBusiness
+    business: AccountBusiness
+  }
+  | {
+    kind: ManualInsertGachaRecordsErrorKind.UnsupportedGachaType
+    business: AccountBusiness
+    gacha_type: number
+  }
+  | {
+    kind: ManualInsertGachaRecordsErrorKind.InvalidPullCount
+    pull_count: number
+  }
+  | {
+    kind: ManualInsertGachaRecordsErrorKind.InvalidEndTime
+    value: string
+    cause: string
+  }
+  | {
+    kind: ManualInsertGachaRecordsErrorKind.MissingMetadataLocale
+    business: AccountBusiness
+    locale: string
+  }
+  | {
+    kind: ManualInsertGachaRecordsErrorKind.CharacterNotFound
+    business: AccountBusiness
+    locale: string
+    name: string
+  }
+  | {
+    kind: ManualInsertGachaRecordsErrorKind.InvalidCharacter
+    business: AccountBusiness
+    locale: string
+    name: string
+  }
+  | {
+    kind: ManualInsertGachaRecordsErrorKind.MissingDefaultMetadataEntry
+    business: AccountBusiness
+    locale: string
+    item_id: number
+  }
+  | {
+    kind: ManualInsertGachaRecordsErrorKind.Sqlx
+    cause: string
+  }
+>
+
+export function isManualInsertGachaRecordsError (error: unknown): error is ManualInsertGachaRecordsError {
+  return isAppError(error)
+    && error.name === NamedManualInsertGachaRecordsError
+}
+
+export interface ManualInsertUpBanner {
+  startTime: string
+  endTime: string
+  version: string | null
+}
+
+export interface ManualInsertEntryOption {
+  itemId: number
+  name: string
+  itemType: string
+  rankType: number
+  upBanners: ManualInsertUpBanner[]
+}
+
+export interface ManualInsertGachaEntryOptionsArgs<T extends AccountBusiness> {
+  business: T
+  gachaType: GachaType<T>
+  customLocale?: string | null
+}
+
+export type ManualInsertGachaEntryOptions
+  = <T extends AccountBusiness> (args: ManualInsertGachaEntryOptionsArgs<T>) => Promise<ManualInsertEntryOption[]>
+
+export interface ManualInsertGachaRecordsArgs<T extends AccountBusiness> {
+  business: T
+  uid: Account['uid']
+  gachaType: GachaType<T>
+  fiveStarName: string
+  pullCount: number
+  endTime: string | Date
+  customLocale?: string | null
+}
+
+export type ManualInsertGachaRecords
+  = <T extends AccountBusiness> (args: ManualInsertGachaRecordsArgs<T>) => Promise<number>
+
+// #endregion
+
 // #region: Legacy Migration
 
 export const NamedLegacyMigrationError = 'LegacyMigrationError' as const
@@ -809,6 +917,18 @@ const BusinessCommands = {
    */
   fetchRecords:
     declareCommand('business_fetch_records') as FetchRecords,
+
+  /**
+   * @throws `ManualInsertGachaRecordsError`
+   */
+  manualInsertGachaEntryOptions:
+    declareCommand('business_manual_insert_gacha_entry_options') as ManualInsertGachaEntryOptions,
+
+  /**
+   * @throws `ManualInsertGachaRecordsError`
+   */
+  manualInsertGachaRecords:
+    declareCommand('business_manual_insert_gacha_records') as ManualInsertGachaRecords,
 
   /**
    * @throws `DatabaseError`

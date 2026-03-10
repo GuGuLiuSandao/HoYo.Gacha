@@ -64,6 +64,7 @@ impl GachaRecord {
   // Known `properties` keys
   pub const KEY_SCHEDULE_ID: &str = "schedule_id";
   pub const KEY_IS_UP: &str = "is_up";
+  pub const KEY_MANUAL_INSERT: &str = "manual_insert";
   pub const IS_UP_ZERO: &str = "0";
 
   /// HACK: 'Genshin Impact: Miliastra Wonderland' only

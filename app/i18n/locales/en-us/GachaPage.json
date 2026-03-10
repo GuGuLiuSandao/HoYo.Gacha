@@ -28,7 +28,50 @@
       "More": {
         "Label": "More options",
         "FullUpdate": "Full update",
-        "ManualInput": "Manual input URL"
+        "ManualInput": "Manual input URL",
+        "ManualInsert": "Manual insert records"
+      },
+      "ManualInsertDialog": {
+        "Title": "Manual insert records:",
+        "GachaType": {
+          "Label": "Banner"
+        },
+        "FiveStarName": {
+          "Label": "5-star item",
+          "Placeholder": "Select one 5-star item",
+          "Loading": "Loading available 5-star items...",
+          "Empty": "No available 5-star item for current banner",
+          "Required": "Please select one 5-star item."
+        },
+        "UpBanner": {
+          "Label": "UP Banner Time",
+          "Placeholder": "Select one UP banner period",
+          "Empty": "No UP banner history for this item",
+          "Help": "After selecting, End Time will be auto-filled with this UP banner end time."
+        },
+        "PullCount": {
+          "Label": "Pull Count",
+          "Placeholder": "For example: 75",
+          "Required": "Please enter pull count.",
+          "ValidateMin": "Pull count must be greater than 0.",
+          "ValidateMax": "Pull count cannot exceed 5000."
+        },
+        "EndTime": {
+          "Label": "End Time",
+          "Required": "Please select end time.",
+          "Validate": "Please enter a valid date-time."
+        },
+        "CancelBtn": "Cancel",
+        "SubmitBtn": "Insert"
+      },
+      "ManualInsert": {
+        "Loading": "Manually inserting $t(Common:{{keyof}}.Gacha.Name) records...",
+        "LoadEntryOptionsError": "Failed to load manual insert entry options:",
+        "Success": {
+          "Title": "Manual insert success:",
+          "Body": "Added {{changes}} records."
+        },
+        "Error": "Manual insert failed:"
       },
       "Obtain": {
         "Loading": "Obtaining $t(Common:{{keyof}}.Gacha.Name) URL...",
